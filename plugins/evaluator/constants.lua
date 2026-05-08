@@ -8,6 +8,8 @@ return {
         ["Distance (Ls)"] = "right",
     },
 
+    UNNAMED_BODY_PLACEHOLDER  = "(unscanned)",
+
     GRAVITY_DIVIDER          = 9.80665,
     DISTANCE_FORMAT          = "%.0f",
     GRAVITY_FORMAT           = "%.2f",

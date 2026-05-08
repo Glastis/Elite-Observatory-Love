@@ -50,11 +50,35 @@ local function maybe_notify(body, settings)
     body.notified_high_value = true
 end
 
+local NULL_PARENT_KIND = "Null"
+
+local function extract_parent_body_id(parents)
+    if type(parents) ~= "table" then return nil end
+    for _, parent in ipairs(parents) do
+        for kind, body_id in pairs(parent) do
+            if kind ~= NULL_PARENT_KIND then return body_id end
+        end
+    end
+    return nil
+end
+
+local function ensure_parent_chain(system_address, parents)
+    if type(parents) ~= "table" then return end
+    for _, parent in ipairs(parents) do
+        for kind, body_id in pairs(parent) do
+            if kind ~= NULL_PARENT_KIND then
+                state.ensure_body(system_address, body_id, nil)
+            end
+        end
+    end
+end
+
 local function on_location_like(entry)
     state.set_current_system(entry.SystemAddress, entry.StarSystem)
 end
 
 local function on_scan(entry, settings)
+    ensure_parent_chain(entry.SystemAddress, entry.Parents)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
     if not body then return end
     body.distance_ls    = entry.DistanceFromArrivalLS or body.distance_ls
@@ -67,6 +91,8 @@ local function on_scan(entry, settings)
     body.atmosphere     = entry.Atmosphere or ""
     body.was_discovered = entry.WasDiscovered == true
     body.was_mapped     = entry.WasMapped == true
+    body.parent_body_id = extract_parent_body_id(entry.Parents)
+        or body.parent_body_id
     body.scanned        = true
     body_value.compute(body)
     evaluate_mapping(body, settings)

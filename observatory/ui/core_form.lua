@@ -6,7 +6,6 @@
 local ui = require("observatory.ui")
 local log_monitor = require("observatory.log_monitor")
 local plugin_manager = require("observatory.plugin_manager")
-local export_handler = require("observatory.export_handler")
 local settings = require("observatory.settings")
 local paths = require("observatory.paths")
 
@@ -20,7 +19,7 @@ local state = {
     tabs        = nil,
     seg_header  = nil,
     seg_apply   = nil,
-    seg_export  = nil,
+    seg_group   = {},      -- plugin id => seg widget state
     cb_rows     = {},      -- one slot per checkbox
     plugin_rows = {},      -- plugin id => { row, switch, status_color }
     grid_state  = {},      -- plugin id => grid scroll state
@@ -366,6 +365,43 @@ end
 
 -- ---------- Plugin tab ----------
 
+local function draw_row_count(plugin, x_right, y, h, font)
+    local row_count = string.format("%d ROWS", #(plugin.grid.rows or {}))
+    local rc_w = ui.text.width(row_count, font, 0.1)
+    ui.text.draw_v_center(row_count, x_right - rc_w, y, h, {
+        font = font, color = theme.colors.text_faint, letter_em = 0.1,
+    })
+end
+
+local function reset_grid_sort(plugin_id)
+    local gs = state.grid_state[plugin_id]
+    if not gs then return end
+    gs.sort_col = nil
+    gs.scroll = 0
+end
+
+local function draw_grouping_button(plugin, x, y, h, font)
+    if not plugin.set_grouping then return end
+    state.seg_group[plugin.id] = state.seg_group[plugin.id] or {}
+    local items = {
+        {
+            label = "GROUP BY BODY",
+            primary = plugin.group_by_body == true,
+            on_click = function()
+                plugin:set_grouping(not plugin.group_by_body)
+                reset_grid_sort(plugin.id)
+            end,
+        },
+    }
+    ui.seg.draw(state.seg_group[plugin.id], items, x, y,
+        { h = h, font = font })
+end
+
+local function draw_plugin_toolbar(plugin, x, y, w, h, font)
+    draw_grouping_button(plugin, x, y, h, font)
+    draw_row_count(plugin, x + w, y, h, font)
+end
+
 local function draw_plugin_body(plugin, w, body_y, body_h)
     local pad_x = theme.metrics.section_pad_x
     local pad_y = theme.metrics.section_pad_y
@@ -391,27 +427,10 @@ local function draw_plugin_body(plugin, w, body_y, body_h)
         return
     end
 
-    -- Export action.
-    state.seg_export = state.seg_export or {}
     local seg_font = theme.font("mono", 10)
-    local export_items = {
-        {
-            label = "EXPORT CSV",
-            primary = true,
-            on_click = function()
-                export_handler.export_csv(plugin, plugin.grid)
-            end,
-        },
-    }
-    local row_count = string.format("%d ROWS", #(plugin.grid.rows or {}))
-    local rc_w = ui.text.width(row_count, seg_font, 0.1)
-    ui.text.draw_v_center(row_count, inner_x + inner_w - rc_w, cy, 24, {
-        font = seg_font, color = theme.colors.text_faint, letter_em = 0.1,
-    })
-    ui.seg.draw(state.seg_export, export_items, inner_x, cy,
-        { h = 24, font = seg_font })
-
-    cy = cy + 24 + 12
+    local toolbar_h = 24
+    draw_plugin_toolbar(plugin, inner_x, cy, inner_w, toolbar_h, seg_font)
+    cy = cy + toolbar_h + 12
 
     state.grid_state[plugin.id] = state.grid_state[plugin.id] or {}
     state.grid_state[plugin.id] = ui.grid.draw(

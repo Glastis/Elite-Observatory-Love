@@ -1,6 +1,7 @@
 local constants = require("plugins.bioinsights.constants")
 local state = require("plugins.bioinsights.state")
 local species_values = require("plugins.bioinsights.species_values")
+local hierarchy = require("observatory.grid_hierarchy")
 
 local grid = {}
 
@@ -19,6 +20,13 @@ local function format_distance(distance_ls)
         return constants.UNKNOWN_TEXT
     end
     return string.format(constants.DISTANCE_FORMAT, distance_ls)
+end
+
+local function display_name(body)
+    if body and body.name and body.name ~= "" and body.name ~= "?" then
+        return body.name
+    end
+    return constants.UNNAMED_BODY_PLACEHOLDER
 end
 
 local function exact_value_for_entry(genus_entry)
@@ -45,10 +53,10 @@ local function format_value_for_genus(genus_entry, genus_label)
         format_number(range.min), format_number(range.max))
 end
 
-local function row_for_genus(body, genus_label)
+local function row_for_genus(body, genus_label, body_label)
     local entry = body.genus_entries[genus_label]
     return {
-        ["Body"]     = body.name,
+        ["Body"]     = body_label,
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = genus_label,
         ["Species"]  = entry.species_label or constants.UNKNOWN_TEXT,
@@ -59,9 +67,9 @@ local function row_for_genus(body, genus_label)
     }
 end
 
-local function row_for_pending_body(body)
+local function row_for_pending_body(body, body_label)
     return {
-        ["Body"]     = body.name,
+        ["Body"]     = body_label,
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = string.format("%s × %d",
             constants.PENDING_BIO_PLACEHOLDER, body.biological_count),
@@ -70,6 +78,20 @@ local function row_for_pending_body(body)
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = constants.UNKNOWN_TEXT,
         ["Distance"] = format_distance(body.distance_ls),
+    }
+end
+
+local function placeholder_ancestor_row(body, body_label)
+    return {
+        ["Body"]     = body_label,
+        ["Type"]     = (body and body.body_type ~= "" and body.body_type)
+            or constants.UNKNOWN_TEXT,
+        ["Genus"]    = constants.UNKNOWN_TEXT,
+        ["Species"]  = constants.UNKNOWN_TEXT,
+        ["Variant"]  = constants.UNKNOWN_TEXT,
+        ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
+        ["Value"]    = constants.UNKNOWN_TEXT,
+        ["Distance"] = format_distance(body and body.distance_ls or 0),
     }
 end
 
@@ -91,6 +113,10 @@ local function body_potential_max(body)
 end
 
 local function should_skip_body(body, settings)
+    if not body then return true end
+    if body.biological_count <= 0 and #body.genus_order == 0 then
+        return true
+    end
     if not settings or not settings.only_show_high_value then return false end
     if #body.genus_order == 0 then return false end
     return body_potential_max(body) < (settings.minimum_high_value or 0)
@@ -109,23 +135,79 @@ local function bodies_with_biology(bodies)
     return list
 end
 
-local function append_body_rows(target_grid, body)
+local function rows_for_body(body, body_label)
     if #body.genus_order == 0 then
-        table.insert(target_grid.rows, row_for_pending_body(body))
-        return
+        return { row_for_pending_body(body, body_label) }
     end
-    for _, genus_label in ipairs(body.genus_order) do
-        table.insert(target_grid.rows, row_for_genus(body, genus_label))
+    local rows = {}
+    for i, genus_label in ipairs(body.genus_order) do
+        local label = (i == 1) and body_label or ""
+        table.insert(rows, row_for_genus(body, genus_label, label))
+    end
+    return rows
+end
+
+local function rebuild_flat(target_grid, bodies, settings)
+    for _, body in ipairs(bodies_with_biology(bodies)) do
+        if not should_skip_body(body, settings) then
+            for _, row in ipairs(rows_for_body(body, body.name)) do
+                table.insert(target_grid.rows, row)
+            end
+        end
     end
 end
 
-function grid.rebuild(target_grid, settings)
-    target_grid.rows = {}
-    for _, body in ipairs(bodies_with_biology(state.bodies_in_current_system())) do
+local function visible_seed_ids(bodies, settings)
+    local seeds = {}
+    for id, body in pairs(bodies) do
         if not should_skip_body(body, settings) then
-            append_body_rows(target_grid, body)
+            table.insert(seeds, id)
         end
     end
+    return seeds
+end
+
+local function emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
+    local body = bodies[id]
+    local prefix = hierarchy.indent_prefix(depth)
+    local indented_name = prefix .. display_name(body)
+    if not body or should_skip_body(body, settings) then
+        table.insert(target_grid.rows, placeholder_ancestor_row(body, indented_name))
+        return
+    end
+    for _, row in ipairs(rows_for_body(body, indented_name)) do
+        table.insert(target_grid.rows, row)
+    end
+end
+
+local function rebuild_hierarchical(target_grid, bodies, settings)
+    hierarchy.walk({
+        seed_ids = visible_seed_ids(bodies, settings),
+        parent_for = function(id)
+            local body = bodies[id]
+            return body and body.parent_body_id
+        end,
+        sort_ids = function(ids)
+            table.sort(ids, function(a, b)
+                local da = bodies[a] and bodies[a].distance_ls or 0
+                local db = bodies[b] and bodies[b].distance_ls or 0
+                return da < db
+            end)
+        end,
+        visit = function(id, depth)
+            emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
+        end,
+    })
+end
+
+function grid.rebuild(target_grid, settings, view_options)
+    target_grid.rows = {}
+    local bodies = state.bodies_in_current_system()
+    if view_options and view_options.group_by_body then
+        rebuild_hierarchical(target_grid, bodies, settings)
+        return
+    end
+    rebuild_flat(target_grid, bodies, settings)
 end
 
 return grid

@@ -35,6 +35,7 @@ return {
     VALUE_MILLION_FORMAT       = "%.1fM",
     VALUE_THOUSAND_FORMAT      = "%.1fK",
     UNKNOWN_TEXT               = "—",
+    UNNAMED_BODY_PLACEHOLDER   = "(unscanned)",
 
     NOTIFY_TITLE_HIGH_VALUE    = "High-value biological",
     NOTIFY_TITLE_PERSONAL_NEW  = "New personal codex entry",

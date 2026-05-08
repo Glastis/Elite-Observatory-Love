@@ -19,6 +19,7 @@ local function blank_body(body_name)
         name                = body_name or "?",
         body_type           = "",
         distance_ls         = 0,
+        parent_body_id      = nil,
         biological_count    = 0,
         geological_count    = 0,
         genus_entries       = {},

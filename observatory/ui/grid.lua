@@ -6,12 +6,71 @@ local M = {}
 
 local CELL_PADDING_X = 6
 local HEADER_LETTER_EM = 0.08
+local SORT_INDICATOR_ASC = " ▲"
+local SORT_INDICATOR_DESC = " ▼"
+local SORT_SUFFIX_BY_DIRECTION = {
+    ascending  = SORT_INDICATOR_ASC,
+    descending = SORT_INDICATOR_DESC,
+}
+local UNIT_MULTIPLIERS = { K = 1e3, M = 1e6 }
+local SORT_KEY_PATTERN = "^%-?(%d+%.?%d*)%s*([KM]?)"
 
 local function fit_text(s, font, em, max_w)
     if not s or s == "" then return "" end
     if max_w <= 0 then return "" end
     if text.width(s, font, em) <= max_w then return s end
     return text.truncate_right(s, font, max_w, em)
+end
+
+local function sort_key(value)
+    local str = tostring(value or "")
+    local num, suffix = str:match(SORT_KEY_PATTERN)
+    if not num or num == "" then return nil end
+    local n = tonumber(num)
+    if not n then return nil end
+    return n * (UNIT_MULTIPLIERS[suffix] or 1)
+end
+
+local function compare_values(a, b, is_ascending)
+    local a_n, b_n = sort_key(a), sort_key(b)
+    if a_n and b_n then
+        if is_ascending then return a_n < b_n end
+        return a_n > b_n
+    end
+    if a_n then return is_ascending end
+    if b_n then return not is_ascending end
+    local a_s, b_s = tostring(a or ""), tostring(b or "")
+    if is_ascending then return a_s < b_s end
+    return a_s > b_s
+end
+
+local function sorted_rows(rows, col, is_ascending)
+    local copy = {}
+    for i, r in ipairs(rows) do copy[i] = r end
+    table.sort(copy, function(a, b)
+        return compare_values(a[col], b[col], is_ascending)
+    end)
+    return copy
+end
+
+local function sort_direction_key(state)
+    if state.sort_ascending then return "ascending" end
+    return "descending"
+end
+
+local function header_label(col, state)
+    if state.sort_col ~= col then return col end
+    return col .. (SORT_SUFFIX_BY_DIRECTION[sort_direction_key(state)] or "")
+end
+
+local function toggle_sort(state, col)
+    if state.sort_col == col then
+        state.sort_ascending = not state.sort_ascending
+    else
+        state.sort_col = col
+        state.sort_ascending = true
+    end
+    state.scroll = 0
 end
 
 local function draw_empty_state(font, x, y, w, h)
@@ -27,18 +86,25 @@ local function handle_wheel_scroll(state, x, y, w, h, row_h)
     end
 end
 
-local function draw_header(cols, ctx, header_color)
+local function handle_header_click(state, col, hx, hy, hw, hh)
+    if not input.clicked_in(hx, hy, hw, hh) then return end
+    toggle_sort(state, col)
+end
+
+local function draw_header(cols, ctx, state, header_color)
     love.graphics.setColor(header_color or theme.colors.panel)
     love.graphics.rectangle("fill", ctx.x, ctx.y, ctx.w, ctx.row_h)
     for i, col in ipairs(cols) do
-        local label = fit_text(col, ctx.font, HEADER_LETTER_EM, ctx.cell_text_w)
-        text.draw_v_center(label, ctx.x + (i - 1) * ctx.col_w + CELL_PADDING_X,
-            ctx.y, ctx.row_h, {
-                font = ctx.font, color = theme.colors.text_faint,
-                letter_em = HEADER_LETTER_EM,
-                align = ctx.align_by_col[col] or "left",
-                width = ctx.cell_text_w,
-            })
+        local hx = ctx.x + (i - 1) * ctx.col_w
+        handle_header_click(state, col, hx, ctx.y, ctx.col_w, ctx.row_h)
+        local label = fit_text(header_label(col, state),
+            ctx.font, HEADER_LETTER_EM, ctx.cell_text_w)
+        text.draw_v_center(label, hx + CELL_PADDING_X, ctx.y, ctx.row_h, {
+            font = ctx.font, color = theme.colors.text_faint,
+            letter_em = HEADER_LETTER_EM,
+            align = ctx.align_by_col[col] or "left",
+            width = ctx.cell_text_w,
+        })
     end
     love.graphics.setColor(theme.colors.rule)
     love.graphics.rectangle("fill", ctx.x, ctx.y + ctx.row_h - 1, ctx.w, 1)
@@ -93,6 +159,7 @@ end
 function M.draw(state, grid, x, y, w, h, opts)
     state = state or {}
     state.scroll = state.scroll or 0
+    if state.sort_ascending == nil then state.sort_ascending = true end
     opts = opts or {}
 
     local font = opts.font or theme.font("mono", 11)
@@ -122,11 +189,16 @@ function M.draw(state, grid, x, y, w, h, opts)
         align_by_col = (grid and grid.column_align) or {},
     }
 
-    draw_header(cols, ctx, opts.header_color)
+    draw_header(cols, ctx, state, opts.header_color)
 
-    local content_h = #rows * row_h
+    local display_rows = rows
+    if state.sort_col then
+        display_rows = sorted_rows(rows, state.sort_col, state.sort_ascending)
+    end
 
-    draw_body(rows, cols, state, ctx, opts)
+    local content_h = #display_rows * row_h
+
+    draw_body(display_rows, cols, state, ctx, opts)
 
     local max_scroll = clamp_scroll(state, content_h, ctx.view_h)
     draw_scrollbar(state, max_scroll, ctx.view_y, ctx.view_h, content_h, x, w)

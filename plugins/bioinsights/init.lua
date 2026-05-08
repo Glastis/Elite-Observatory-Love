@@ -31,7 +31,9 @@ local function ensure_settings(plugin)
 end
 
 local function refresh_grid()
-    grid_builder.rebuild(Plugin.grid, Plugin.settings)
+    grid_builder.rebuild(Plugin.grid, Plugin.settings, {
+        group_by_body = Plugin.group_by_body,
+    })
 end
 
 local function send_notification(args)
@@ -52,6 +54,11 @@ function Plugin:journal_event(entry)
 end
 
 function Plugin:status_change(_)
+end
+
+function Plugin:set_grouping(is_enabled)
+    self.group_by_body = is_enabled and true or false
+    refresh_grid()
 end
 
 return Plugin

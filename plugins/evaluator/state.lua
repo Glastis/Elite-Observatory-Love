@@ -9,6 +9,7 @@ local function blank_body()
     return {
         name                  = "?",
         body_id               = nil,
+        parent_body_id        = nil,
         body_type             = "",
         is_star               = false,
         is_landable           = false,

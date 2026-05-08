@@ -1,5 +1,6 @@
 local constants = require("plugins.evaluator.constants")
 local state = require("plugins.evaluator.state")
+local hierarchy = require("observatory.grid_hierarchy")
 
 local grid = {}
 
@@ -43,9 +44,16 @@ local function format_volcanism(volcanism)
     return volcanism
 end
 
-local function row_for_body(body)
+local function display_name(body)
+    if body and body.name and body.name ~= "" and body.name ~= "?" then
+        return body.name
+    end
+    return constants.UNNAMED_BODY_PLACEHOLDER
+end
+
+local function row_for_body(body, indented_name)
     return {
-        ["Body"]          = body.name,
+        ["Body"]          = indented_name or display_name(body),
         ["Type"]          = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Distance (Ls)"] = format_distance(body.distance_ls),
         ["Gravity (g)"]   = format_gravity(body.gravity_ms2),
@@ -57,8 +65,22 @@ local function row_for_body(body)
     }
 end
 
+local function placeholder_row_for_id(body_id, indented_name)
+    return {
+        ["Body"]          = indented_name,
+        ["Type"]          = constants.UNKNOWN_TEXT,
+        ["Distance (Ls)"] = constants.UNKNOWN_TEXT,
+        ["Gravity (g)"]   = constants.UNKNOWN_TEXT,
+        ["Terraform"]     = constants.TERRAFORM_LABEL_NO,
+        ["Value"]         = constants.UNKNOWN_TEXT,
+        ["Max Value"]     = constants.UNKNOWN_TEXT,
+        ["Map"]           = constants.MAP_LABEL_NO,
+        ["Volcanism"]     = constants.UNKNOWN_TEXT,
+    }
+end
+
 local function should_skip(body, settings)
-    if not body.scanned then return true end
+    if not body or not body.scanned then return true end
     if not settings then return false end
     if body.potential_max < settings.minimum_body_value then
         return true
@@ -66,22 +88,76 @@ local function should_skip(body, settings)
     return false
 end
 
-local function sorted_bodies(bodies)
-    local list = {}
-    for _, body in pairs(bodies) do table.insert(list, body) end
+local function sort_by_distance(list)
     table.sort(list, function(a, b)
         return (a.distance_ls or 0) < (b.distance_ls or 0)
     end)
+end
+
+local function sorted_bodies(bodies)
+    local list = {}
+    for _, body in pairs(bodies) do table.insert(list, body) end
+    sort_by_distance(list)
     return list
 end
 
-function grid.rebuild(target_grid, settings)
-    target_grid.rows = {}
-    for _, body in ipairs(sorted_bodies(state.bodies_in_current_system())) do
+local function rebuild_flat(target_grid, bodies, settings)
+    for _, body in ipairs(sorted_bodies(bodies)) do
         if not should_skip(body, settings) then
             table.insert(target_grid.rows, row_for_body(body))
         end
     end
+end
+
+local function visible_seed_ids(bodies, settings)
+    local seeds = {}
+    for id, body in pairs(bodies) do
+        if not should_skip(body, settings) then
+            table.insert(seeds, id)
+        end
+    end
+    return seeds
+end
+
+local function emit_hierarchical_row(target_grid, bodies, id, depth)
+    local body = bodies[id]
+    local name = body and display_name(body) or constants.UNNAMED_BODY_PLACEHOLDER
+    local indented = hierarchy.indent_prefix(depth) .. name
+    if body and body.scanned then
+        table.insert(target_grid.rows, row_for_body(body, indented))
+    else
+        table.insert(target_grid.rows, placeholder_row_for_id(id, indented))
+    end
+end
+
+local function rebuild_hierarchical(target_grid, bodies, settings)
+    hierarchy.walk({
+        seed_ids = visible_seed_ids(bodies, settings),
+        parent_for = function(id)
+            local body = bodies[id]
+            return body and body.parent_body_id
+        end,
+        sort_ids = function(ids)
+            table.sort(ids, function(a, b)
+                local da = bodies[a] and bodies[a].distance_ls or 0
+                local db = bodies[b] and bodies[b].distance_ls or 0
+                return da < db
+            end)
+        end,
+        visit = function(id, depth)
+            emit_hierarchical_row(target_grid, bodies, id, depth)
+        end,
+    })
+end
+
+function grid.rebuild(target_grid, settings, view_options)
+    target_grid.rows = {}
+    local bodies = state.bodies_in_current_system()
+    if view_options and view_options.group_by_body then
+        rebuild_hierarchical(target_grid, bodies, settings)
+        return
+    end
+    rebuild_flat(target_grid, bodies, settings)
 end
 
 return grid

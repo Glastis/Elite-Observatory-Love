@@ -81,29 +81,6 @@ do
     eq(invalid.OriginalEvent, "Foo", "broken line keeps OriginalEvent")
 end
 
--- export_handler ----------------------------------------------------------
-do
-    local export_handler = require("observatory.export_handler")
-    local plugin = { id = "p", name = "P", short_name = "P" }
-    local grid = {
-        columns = { "A", "B" },
-        rows = {
-            { A = "x",      B = "y" },
-            { A = "tab\tx", B = "line\nbreak" },
-        },
-    }
-    local out = "/tmp/observatory-test-export.csv"
-    os.remove(out)
-    local ok, err = export_handler.export_csv(plugin, grid, out)
-    truthy(ok, "export_csv ok: " .. tostring(err))
-    local f = assert(io.open(out, "rb"))
-    local content = f:read("*a")
-    f:close()
-    eq(content, "A\tB\nx\ty\ntab x\tline break\n",
-        "tabs/newlines escaped in fields")
-    os.remove(out)
-end
-
 -- log_monitor bit flags ---------------------------------------------------
 do
     local log_monitor = require("observatory.log_monitor")
@@ -205,6 +182,135 @@ do
     evaluator_handlers.dispatch({event = "LoadGame"}, settings)
     eq(evaluator_state.current_system_address(), nil,
         "LoadGame resets evaluator state")
+end
+
+-- evaluator: hierarchical grid grouping -----------------------------------
+do
+    local evaluator_state = require("plugins.evaluator.state")
+    local evaluator_handlers = require("plugins.evaluator.handlers")
+    local evaluator_grid = require("plugins.evaluator.grid")
+    local evaluator_constants = require("plugins.evaluator.constants")
+
+    evaluator_state.reset()
+    evaluator_handlers.set_notifier(function(_) end)
+    evaluator_handlers.set_on_change(function() end)
+
+    local settings = {
+        minimum_body_value          = 100000,
+        minimum_mapping_value       = 200000,
+        max_distance_elw            = 100000,
+        max_distance_ww             = 100000,
+        max_distance_aw             = 100000,
+        max_distance_atmospheric    = 50000,
+        max_distance_other          = 25000,
+        notify_on_high_value        = false,
+        minimum_high_value_notify   = 500000,
+    }
+
+    evaluator_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 7, StarSystem = "Hier",
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 7, BodyID = 0,
+        BodyName = "Hier", StarType = "G",
+        DistanceFromArrivalLS = 0, WasDiscovered = true,
+        Parents = {},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 7, BodyID = 1,
+        BodyName = "Hier 1", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 100,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 7, BodyID = 2,
+        BodyName = "Hier 1 a", PlanetClass = "Earthlike body",
+        DistanceFromArrivalLS = 110,
+        TerraformState = "Terraformable",
+        Parents = {{ Planet = 1 }, { Star = 0 }},
+    }, settings)
+
+    local target = {
+        columns = evaluator_constants.GRID_COLUMNS,
+        rows = {},
+    }
+    evaluator_grid.rebuild(target, settings, { group_by_body = true })
+
+    eq(#target.rows, 3, "hierarchical rebuild surfaces ELW and its ancestors")
+    eq(target.rows[1]["Body"], "Hier", "root star has no indent")
+    truthy(target.rows[2]["Body"]:find("└─ Hier 1", 1, true),
+        "rocky parent carried as ancestor with branch glyph")
+    truthy(target.rows[3]["Body"]:find("  └─ Hier 1 a", 1, true),
+        "ELW grandchild indented one level deeper")
+
+    target.rows = {}
+    evaluator_grid.rebuild(target, settings)
+    eq(#target.rows, 1, "flat rebuild filters out low-value bodies")
+    eq(target.rows[1]["Body"], "Hier 1 a", "only ELW remains in flat view")
+end
+
+-- bioinsights: hierarchical grid grouping ---------------------------------
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 11, StarSystem = "Bio",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 11, BodyID = 0,
+        BodyName = "Bio", StarType = "G",
+        DistanceFromArrivalLS = 0,
+        Parents = {},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 11, BodyID = 1,
+        BodyName = "Bio 1", PlanetClass = "High metal content body",
+        DistanceFromArrivalLS = 50,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 11, BodyID = 2,
+        BodyName = "Bio 1 a", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 60,
+        Parents = {{ Planet = 1 }, { Star = 0 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 11, BodyID = 2,
+        BodyName = "Bio 1 a",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings, { group_by_body = true })
+
+    eq(#target.rows, 3, "hierarchical surfaces bio body + 2 ancestors")
+    eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
+    truthy(target.rows[2]["Body"]:find("└─ Bio 1", 1, true),
+        "intermediate planet carries branch glyph at depth 1")
+    truthy(target.rows[3]["Body"]:find("  └─ Bio 1 a", 1, true),
+        "bio body indented one level deeper")
+    eq(target.rows[3]["Genus"], "Bacterium",
+        "bio body row keeps genus data in hierarchical view")
+
+    target.rows = {}
+    bi_grid.rebuild(target, settings)
+    eq(#target.rows, 1, "flat rebuild only keeps the bio body")
+    eq(target.rows[1]["Body"], "Bio 1 a", "flat row shows the bio body")
 end
 
 -- evaluator: distance threshold via lookup table --------------------------
