@@ -123,11 +123,16 @@ local function emit_hierarchical_row(target_grid, bodies, id, depth)
     local body = bodies[id]
     local name = body and display_name(body) or constants.UNNAMED_BODY_PLACEHOLDER
     local indented = hierarchy.indent_prefix(depth) .. name
+    local row
     if body and body.scanned then
-        table.insert(target_grid.rows, row_for_body(body, indented))
+        row = row_for_body(body, indented)
     else
-        table.insert(target_grid.rows, placeholder_row_for_id(id, indented))
+        row = placeholder_row_for_id(id, indented)
     end
+    row._depth = depth
+    row._node_id = "body_" .. tostring(id)
+    row._raw = { Body = name }
+    table.insert(target_grid.rows, row)
 end
 
 local function rebuild_hierarchical(target_grid, bodies, settings)

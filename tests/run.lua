@@ -313,6 +313,78 @@ do
     eq(target.rows[1]["Body"], "Bio 1 a", "flat row shows the bio body")
 end
 
+-- evaluator: hierarchical rows carry sort metadata ------------------------
+do
+    local evaluator_state = require("plugins.evaluator.state")
+    local evaluator_handlers = require("plugins.evaluator.handlers")
+    local evaluator_grid = require("plugins.evaluator.grid")
+    local evaluator_constants = require("plugins.evaluator.constants")
+
+    evaluator_state.reset()
+    evaluator_handlers.set_notifier(function(_) end)
+    evaluator_handlers.set_on_change(function() end)
+
+    local settings = {
+        minimum_body_value          = 0,
+        minimum_mapping_value       = 200000,
+        max_distance_elw            = 100000,
+        max_distance_ww             = 100000,
+        max_distance_aw             = 100000,
+        max_distance_atmospheric    = 50000,
+        max_distance_other          = 25000,
+        notify_on_high_value        = false,
+        minimum_high_value_notify   = 500000,
+    }
+
+    evaluator_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 13, StarSystem = "Sort",
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 13, BodyID = 0,
+        BodyName = "Sort", StarType = "G", DistanceFromArrivalLS = 0,
+        Parents = {},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 13, BodyID = 1,
+        BodyName = "Sort A", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 200,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 13, BodyID = 2,
+        BodyName = "Sort B", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 100,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 13, BodyID = 3,
+        BodyName = "Sort A 1", PlanetClass = "Icy body",
+        DistanceFromArrivalLS = 250,
+        Parents = {{ Planet = 1 }, { Star = 0 }},
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 13, BodyID = 4,
+        BodyName = "Sort A 2", PlanetClass = "Icy body",
+        DistanceFromArrivalLS = 220,
+        Parents = {{ Planet = 1 }, { Star = 0 }},
+    }, settings)
+
+    local target = {
+        columns = evaluator_constants.GRID_COLUMNS,
+        rows = {},
+    }
+    evaluator_grid.rebuild(target, settings, { group_by_body = true })
+
+    truthy(target.rows[1]._depth == 0,
+        "root row carries depth 0 metadata")
+    truthy(target.rows[1]._raw and target.rows[1]._raw["Body"] == "Sort",
+        "root row carries raw body name for sort")
+    truthy(target.rows[1]._node_id == "body_0",
+        "root row carries node_id keyed on body id")
+    truthy(target.rows[2]._depth == 1,
+        "first child row carries depth 1 metadata")
+end
+
 -- evaluator: distance threshold via lookup table --------------------------
 do
     local constants = require("plugins.evaluator.constants")

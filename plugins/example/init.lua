@@ -128,8 +128,12 @@ local function hierarchical_rows(bodies)
         end,
         visit = function(id, depth)
             local body = bodies[id]
-            local indented = hierarchy.indent_prefix(depth) .. display_name(body)
-            table.insert(rows, row_for_body(body, indented))
+            local raw_name = display_name(body)
+            local row = row_for_body(body, hierarchy.indent_prefix(depth) .. raw_name)
+            row._depth = depth
+            row._node_id = "body_" .. tostring(id)
+            row._raw = { Body = raw_name }
+            table.insert(rows, row)
         end,
     })
     return rows

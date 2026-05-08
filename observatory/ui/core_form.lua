@@ -373,10 +373,9 @@ local function draw_row_count(plugin, x_right, y, h, font)
     })
 end
 
-local function reset_grid_sort(plugin_id)
+local function reset_grid_scroll(plugin_id)
     local gs = state.grid_state[plugin_id]
     if not gs then return end
-    gs.sort_col = nil
     gs.scroll = 0
 end
 
@@ -389,7 +388,7 @@ local function draw_grouping_button(plugin, x, y, h, font)
             primary = plugin.group_by_body == true,
             on_click = function()
                 plugin:set_grouping(not plugin.group_by_body)
-                reset_grid_sort(plugin.id)
+                reset_grid_scroll(plugin.id)
             end,
         },
     }

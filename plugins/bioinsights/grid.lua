@@ -167,16 +167,27 @@ local function visible_seed_ids(bodies, settings)
     return seeds
 end
 
+local function annotate_hierarchy(row, depth, node_id, raw_body_name)
+    row._depth = depth
+    row._node_id = node_id
+    row._raw = { Body = raw_body_name }
+    return row
+end
+
 local function emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
     local body = bodies[id]
-    local prefix = hierarchy.indent_prefix(depth)
-    local indented_name = prefix .. display_name(body)
+    local raw_name = display_name(body)
+    local indented_name = hierarchy.indent_prefix(depth) .. raw_name
+    local node_id = "body_" .. tostring(id)
     if not body or should_skip_body(body, settings) then
-        table.insert(target_grid.rows, placeholder_ancestor_row(body, indented_name))
+        table.insert(target_grid.rows,
+            annotate_hierarchy(placeholder_ancestor_row(body, indented_name),
+                depth, node_id, raw_name))
         return
     end
     for _, row in ipairs(rows_for_body(body, indented_name)) do
-        table.insert(target_grid.rows, row)
+        table.insert(target_grid.rows,
+            annotate_hierarchy(row, depth, node_id, raw_name))
     end
 end
 

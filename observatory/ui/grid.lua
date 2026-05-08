@@ -44,13 +44,91 @@ local function compare_values(a, b, is_ascending)
     return a_s > b_s
 end
 
+local function sort_value_for(row, col)
+    if row._raw and row._raw[col] ~= nil then return row._raw[col] end
+    return row[col]
+end
+
 local function sorted_rows(rows, col, is_ascending)
     local copy = {}
     for i, r in ipairs(rows) do copy[i] = r end
     table.sort(copy, function(a, b)
-        return compare_values(a[col], b[col], is_ascending)
+        return compare_values(sort_value_for(a, col),
+            sort_value_for(b, col), is_ascending)
     end)
     return copy
+end
+
+local function build_hierarchy_nodes(rows)
+    local nodes = {}
+    local stack = {}
+    local current_node_id
+    for i, row in ipairs(rows) do
+        local depth = row._depth or 0
+        local node_id = row._node_id or ("__row_" .. tostring(i))
+        if node_id ~= current_node_id then
+            while #stack > 0 and stack[#stack].depth >= depth do
+                table.remove(stack)
+            end
+            local parent_idx = #stack > 0 and stack[#stack].node_idx or nil
+            table.insert(nodes, {
+                depth        = depth,
+                parent_idx   = parent_idx,
+                row_indices  = { i },
+            })
+            table.insert(stack, { node_idx = #nodes, depth = depth })
+            current_node_id = node_id
+        else
+            table.insert(nodes[#nodes].row_indices, i)
+        end
+    end
+    return nodes
+end
+
+local function children_map_from_nodes(nodes)
+    local children = {}
+    local roots = {}
+    for i, node in ipairs(nodes) do
+        if node.parent_idx then
+            children[node.parent_idx] = children[node.parent_idx] or {}
+            table.insert(children[node.parent_idx], i)
+        else
+            table.insert(roots, i)
+        end
+    end
+    return roots, children
+end
+
+local function sorted_hierarchical_rows(rows, col, is_ascending)
+    local nodes = build_hierarchy_nodes(rows)
+    local roots, children = children_map_from_nodes(nodes)
+    local function key_of(node_idx)
+        local first_row = rows[nodes[node_idx].row_indices[1]]
+        return sort_value_for(first_row, col)
+    end
+    local function less(a, b)
+        return compare_values(key_of(a), key_of(b), is_ascending)
+    end
+    table.sort(roots, less)
+    for _, kids in pairs(children) do table.sort(kids, less) end
+    local output = {}
+    local function emit(node_idx)
+        for _, ri in ipairs(nodes[node_idx].row_indices) do
+            table.insert(output, rows[ri])
+        end
+        local kids = children[node_idx]
+        if not kids then return end
+        for _, j in ipairs(kids) do emit(j) end
+    end
+    for _, root in ipairs(roots) do emit(root) end
+    return output
+end
+
+local function is_hierarchical(rows)
+    for _, row in ipairs(rows) do
+        if row._depth ~= nil then return true end
+    end
+    return false
 end
 
 local function sort_direction_key(state)
@@ -193,7 +271,13 @@ function M.draw(state, grid, x, y, w, h, opts)
 
     local display_rows = rows
     if state.sort_col then
-        display_rows = sorted_rows(rows, state.sort_col, state.sort_ascending)
+        if is_hierarchical(rows) then
+            display_rows = sorted_hierarchical_rows(rows,
+                state.sort_col, state.sort_ascending)
+        else
+            display_rows = sorted_rows(rows,
+                state.sort_col, state.sort_ascending)
+        end
     end
 
     local content_h = #display_rows * row_h
