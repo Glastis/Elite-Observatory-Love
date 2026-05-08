@@ -140,7 +140,7 @@ local function draw_tabs(w, y)
     state.tabs = state.tabs or {}
 
     local labels = { "Core settings" }
-    for _, p in ipairs(plugin_manager.list()) do
+    for _, p in ipairs(plugin_manager.list_enabled()) do
         table.insert(labels, p.short_name or p.name)
     end
 
@@ -446,7 +446,7 @@ local function draw_body(w, body_y, body_h, tab_index)
     if tab_index == 1 then
         draw_settings_body(w, body_y, body_h)
     else
-        local plugin = plugin_manager.list()[tab_index - 1]
+        local plugin = plugin_manager.list_enabled()[tab_index - 1]
         if plugin then
             draw_plugin_body(plugin, w, body_y, body_h)
         end

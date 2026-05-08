@@ -160,6 +160,16 @@ end
 
 function plugin_manager.list() return plugins end
 
+function plugin_manager.list_enabled()
+    local result = {}
+    for _, p in ipairs(plugins) do
+        if not disabled[p.id] then
+            table.insert(result, p)
+        end
+    end
+    return result
+end
+
 function plugin_manager.errors() return errors end
 
 function plugin_manager.set_enabled(plugin_id, enabled)
