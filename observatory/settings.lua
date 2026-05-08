@@ -26,6 +26,9 @@ local DEFAULTS = {
     PluginsEnabled      = "",
     MainWindowSize      = { width = 1024, height = 640 },
     PluginSettings      = {},
+    CombinedViewLeft    = "",
+    CombinedViewRight   = "",
+    CombinedViewSplit   = "vertical",
 }
 
 local SAVE_FILE = "observatory.config"

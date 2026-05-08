@@ -26,6 +26,11 @@ local function item_width(it, font)
     return pad + prefix_w + prefix_gap + lw
 end
 
+local PREFIX_BUILDERS = {
+    play = function(px, py, ps, color) icon.play(px, py, ps, color) end,
+    stop = function(px, py, ps, color) icon.stop(px, py, ps, color) end,
+}
+
 -- items[i]: { label, letter_em, primary (bool), icon ("play"|"stop"|nil),
 --             on_click (fn), min_w }.
 -- Returns total width consumed, clicked index (or nil), state.
@@ -52,13 +57,7 @@ function M.draw(state, items, x, y, opts)
     for i, it in ipairs(items) do
         local iw = widths[i]
         local is_last = i == #items
-
-        local prefix
-        if it.icon == "play" then
-            prefix = function(px, py, ps, color) icon.play(px, py, ps, color) end
-        elseif it.icon == "stop" then
-            prefix = function(px, py, ps, color) icon.stop(px, py, ps, color) end
-        end
+        local prefix = it.icon and PREFIX_BUILDERS[it.icon] or nil
 
         local was_clicked = button.draw(state.items[i],
             cursor, y, iw, h, {

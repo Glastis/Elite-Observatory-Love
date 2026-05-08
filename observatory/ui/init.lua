@@ -12,6 +12,7 @@ return {
     row             = require("observatory.ui.row"),
     button          = require("observatory.ui.button"),
     seg             = require("observatory.ui.seg"),
+    picker          = require("observatory.ui.picker"),
     tabs            = require("observatory.ui.tabs"),
     checkbox        = require("observatory.ui.checkbox"),
     switch          = require("observatory.ui.switch"),

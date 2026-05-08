@@ -27,6 +27,7 @@ local state = {
     last_tab    = 1,
     journal_field = nil,   -- text_field state for journal folder
     journal_seeded = false,
+    seg_combined = { left = {}, right = {}, split = {} },
 }
 
 local CB_SETTINGS = {
@@ -35,6 +36,14 @@ local CB_SETTINGS = {
     { key = "StartReadAll", label = "Backfill all journals on first run" },
     { key = "AltMonitor",   label = "Polling monitor mode" },
 }
+
+local FIXED_TABS = { "Core settings", "Combined" }
+local COMBINED_SEPARATOR_W = 1
+local COMBINED_SLOT_KEYS = { left = "CombinedViewLeft", right = "CombinedViewRight" }
+local COMBINED_SPLIT_KEY = "CombinedViewSplit"
+local COMBINED_DEFAULT_SPLIT = "vertical"
+local COMBINED_PLACEHOLDER_NONE = "(none)"
+local COMBINED_PANE_PLACEHOLDER = "Pick a plugin in Core settings."
 
 -- ---------- Helpers ----------
 
@@ -139,7 +148,8 @@ local function draw_tabs(w, y)
     })
     state.tabs = state.tabs or {}
 
-    local labels = { "Core settings" }
+    local labels = {}
+    for _, l in ipairs(FIXED_TABS) do table.insert(labels, l) end
     for _, p in ipairs(plugin_manager.list_enabled()) do
         table.insert(labels, p.short_name or p.name)
     end
@@ -158,6 +168,101 @@ local function begin_pane_fade(tab_index)
     end
     local k = ui.animation.fade_in(state.fade, ui.input.dt, 0.25)
     return k, (1 - k) * 4
+end
+
+-- ---------- Combined view configuration ----------
+
+local SPLIT_OPTIONS = { "vertical", "horizontal" }
+local NONE_VALUE = ""
+
+local function none_picker_item(setting_key, current)
+    return {
+        key = NONE_VALUE,
+        label = COMBINED_PLACEHOLDER_NONE:upper(),
+        primary = current == NONE_VALUE,
+        on_click = function()
+            settings.set(setting_key, NONE_VALUE)
+            settings.save()
+        end,
+    }
+end
+
+local function plugin_picker_item(plugin, setting_key, current)
+    local plugin_id = plugin.id
+    return {
+        key = plugin_id,
+        label = (plugin.short_name or plugin.name):upper(),
+        primary = current == plugin_id,
+        on_click = function()
+            settings.set(setting_key, plugin_id)
+            settings.save()
+        end,
+    }
+end
+
+local function combined_picker_items(setting_key, excluded_id)
+    local current = settings.get(setting_key) or NONE_VALUE
+    local items = { none_picker_item(setting_key, current) }
+    for _, p in ipairs(plugin_manager.list_enabled()) do
+        local item = plugin_picker_item(p, setting_key, current)
+        if p.id == excluded_id and p.id ~= current then
+            item.disabled = true
+        end
+        table.insert(items, item)
+    end
+    return items
+end
+
+local function combined_split_items()
+    local current = settings.get(COMBINED_SPLIT_KEY) or COMBINED_DEFAULT_SPLIT
+    local items = {}
+    for _, opt in ipairs(SPLIT_OPTIONS) do
+        local value = opt
+        table.insert(items, {
+            key = value,
+            label = value:upper(),
+            primary = current == value,
+            on_click = function()
+                settings.set(COMBINED_SPLIT_KEY, value)
+                settings.save()
+            end,
+        })
+    end
+    return items
+end
+
+local function draw_combined_field(label, picker_state, items, inner_x, cy, inner_w, font, row_h)
+    local _, content_y = ui.labeled_value.draw(label, inner_x, cy, inner_w)
+    ui.picker.draw(picker_state, items, inner_x, content_y, {
+        h = row_h, font = font, max_w = inner_w,
+    })
+    return content_y + row_h + 12
+end
+
+local function draw_combined_settings(inner_x, cy, inner_w)
+    local current_split = settings.get(COMBINED_SPLIT_KEY) or COMBINED_DEFAULT_SPLIT
+    local current_left = settings.get(COMBINED_SLOT_KEYS.left) or NONE_VALUE
+    local current_right = settings.get(COMBINED_SLOT_KEYS.right) or NONE_VALUE
+
+    cy = cy + ui.section_header.draw("COMBINED VIEW", inner_x, cy, inner_w, {
+        num = "04",
+        right = current_split:upper(),
+    }) + 8
+
+    local picker_font = theme.font("mono", 10)
+    local row_h = 24
+
+    cy = draw_combined_field("LEFT", state.seg_combined.left,
+        combined_picker_items(COMBINED_SLOT_KEYS.left, current_right),
+        inner_x, cy, inner_w, picker_font, row_h)
+    cy = draw_combined_field("RIGHT", state.seg_combined.right,
+        combined_picker_items(COMBINED_SLOT_KEYS.right, current_left),
+        inner_x, cy, inner_w, picker_font, row_h)
+    cy = draw_combined_field("SPLIT", state.seg_combined.split,
+        combined_split_items(),
+        inner_x, cy, inner_w, picker_font, row_h)
+
+    return cy
 end
 
 -- ---------- Settings tab ----------
@@ -264,7 +369,10 @@ local function draw_left_column(x, y, w, h)
             })
             cy = cy + err_font:getHeight() + 4
         end
+        cy = cy + 12
     end
+
+    draw_combined_settings(inner_x, cy, inner_w)
 end
 
 local function draw_right_column(x, y, w, h)
@@ -401,10 +509,10 @@ local function draw_plugin_toolbar(plugin, x, y, w, h, font)
     draw_row_count(plugin, x + w, y, h, font)
 end
 
-local function draw_plugin_body(plugin, w, body_y, body_h)
+local function draw_plugin_body(plugin, x, body_y, w, body_h)
     local pad_x = theme.metrics.section_pad_x
     local pad_y = theme.metrics.section_pad_y
-    local inner_x = pad_x
+    local inner_x = x + pad_x
     local inner_w = w - pad_x * 2
 
     local cy = body_y + pad_y
@@ -416,7 +524,7 @@ local function draw_plugin_body(plugin, w, body_y, body_h)
 
     if not plugin.grid then
         ui.text.draw("This plugin has no grid.",
-            0, body_y + body_h / 2 - 8, {
+            x, body_y + body_h / 2 - 8, {
                 font = theme.font("mono", 11),
                 color = theme.colors.text_faint,
                 letter_em = 0.08,
@@ -437,18 +545,93 @@ local function draw_plugin_body(plugin, w, body_y, body_h)
         inner_x, cy, inner_w, body_y + body_h - cy - pad_y)
 end
 
+-- ---------- Combined view tab ----------
+
+local SPLIT_LAYOUTS = {
+    vertical = function(w, body_y, body_h)
+        local half_w = math.floor(w / 2)
+        return {
+            { x = 0,      y = body_y, w = half_w,     h = body_h },
+            { x = half_w, y = body_y, w = w - half_w, h = body_h },
+            separator = {
+                x = half_w, y = body_y, w = COMBINED_SEPARATOR_W, h = body_h,
+            },
+        }
+    end,
+    horizontal = function(w, body_y, body_h)
+        local half_h = math.floor(body_h / 2)
+        return {
+            { x = 0, y = body_y,          w = w, h = half_h },
+            { x = 0, y = body_y + half_h, w = w, h = body_h - half_h },
+            separator = {
+                x = 0, y = body_y + half_h, w = w, h = COMBINED_SEPARATOR_W,
+            },
+        }
+    end,
+}
+
+local function plugin_for_combined_pane(plugin_id)
+    if not plugin_id or plugin_id == "" then return nil end
+    for _, p in ipairs(plugin_manager.list_enabled()) do
+        if p.id == plugin_id then return p end
+    end
+    return nil
+end
+
+local function draw_combined_pane(plugin, pane)
+    if plugin then
+        draw_plugin_body(plugin, pane.x, pane.y, pane.w, pane.h)
+        return
+    end
+    local font = theme.font("mono", 11)
+    ui.text.draw(COMBINED_PANE_PLACEHOLDER,
+        pane.x, pane.y + pane.h / 2 - font:getHeight() / 2, {
+            font = font, color = theme.colors.text_faint,
+            letter_em = 0.08, align = "center", width = pane.w,
+        })
+end
+
+local function combined_layout_for(w, body_y, body_h)
+    local split = settings.get(COMBINED_SPLIT_KEY) or COMBINED_DEFAULT_SPLIT
+    local layout_fn = SPLIT_LAYOUTS[split] or SPLIT_LAYOUTS[COMBINED_DEFAULT_SPLIT]
+    return layout_fn(w, body_y, body_h)
+end
+
+local function draw_combined_body(w, body_y, body_h)
+    local panes = combined_layout_for(w, body_y, body_h)
+    local left = plugin_for_combined_pane(settings.get(COMBINED_SLOT_KEYS.left))
+    local right = plugin_for_combined_pane(settings.get(COMBINED_SLOT_KEYS.right))
+    draw_combined_pane(left, panes[1])
+    draw_combined_pane(right, panes[2])
+
+    local sep = panes.separator
+    love.graphics.setColor(theme.colors.rule)
+    love.graphics.rectangle("fill", sep.x, sep.y, sep.w, sep.h)
+end
+
+-- ---------- Body dispatcher ----------
+
+local function fixed_tab_handlers(w, body_y, body_h)
+    return {
+        function() draw_settings_body(w, body_y, body_h) end,
+        function() draw_combined_body(w, body_y, body_h) end,
+    }
+end
+
 local function draw_body(w, body_y, body_h, tab_index)
     local _, y_offset = begin_pane_fade(tab_index)
 
     love.graphics.push()
     love.graphics.translate(0, y_offset)
 
-    if tab_index == 1 then
-        draw_settings_body(w, body_y, body_h)
+    local handlers = fixed_tab_handlers(w, body_y, body_h)
+    local handler = handlers[tab_index]
+    if handler then
+        handler()
     else
-        local plugin = plugin_manager.list_enabled()[tab_index - 1]
+        local plugin = plugin_manager.list_enabled()[tab_index - #FIXED_TABS]
         if plugin then
-            draw_plugin_body(plugin, w, body_y, body_h)
+            draw_plugin_body(plugin, 0, body_y, w, body_h)
         end
     end
 
