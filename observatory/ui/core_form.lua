@@ -457,6 +457,37 @@ end
 
 -- ---------- Bottom status bar ----------
 
+local function monitor_status_label()
+    if log_monitor.is_batch_read() then return "BATCH" end
+    if log_monitor.is_monitoring() then return "REALTIME" end
+    if log_monitor.current_state() == 0 then return "IDLE" end
+    return "BUSY"
+end
+
+local function monitor_status_color(label)
+    if label == "REALTIME" then
+        return ui.pulse.color(theme.colors.success)
+    end
+    return theme.colors.accent
+end
+
+local function draw_monitor_status(w, y, bh)
+    local label = monitor_status_label()
+    local color = monitor_status_color(label)
+    local font = theme.font("mono", 10)
+    local glyph_size = math.floor(font:getHeight() * 0.7)
+    local glyph_gap = 6
+    local pad_x = 14
+    local label_w = ui.text.width(label, font, 0.1)
+    local cell_w = label_w + pad_x * 2
+    local x = w - cell_w - glyph_size - glyph_gap
+    ui.icon.diamond(x, y + (bh - glyph_size) / 2, glyph_size, color)
+    ui.status_cell.draw({
+        { text = label, color = color },
+    }, x + glyph_size + glyph_gap, y, bh,
+        { divider = false, accent = true })
+end
+
 local function draw_status_bar(w, h)
     local bh = theme.metrics.bar_bottom_h
     local y = h - bh
@@ -484,26 +515,7 @@ local function draw_status_bar(w, h)
           color = theme.colors.text_dim, no_letter_em = true },
     }, cursor, y, bh)
 
-    local s = log_monitor.current_state()
-    local label
-    if log_monitor.is_batch_read() then label = "BATCH"
-    elseif log_monitor.is_monitoring() then label = "REALTIME"
-    elseif s == 0 then label = "IDLE"
-    else label = "BUSY" end
-    local idle_font = theme.font("mono", 10)
-    local idle_glyph_size = math.floor(idle_font:getHeight() * 0.7)
-    local idle_glyph_gap = 6
-    local idle_pad_x = 14
-    local label_w = ui.text.width(label, idle_font, 0.1)
-    local cell_w = label_w + idle_pad_x * 2
-    local idle_x = w - cell_w - idle_glyph_size - idle_glyph_gap
-    ui.icon.diamond(idle_x,
-        y + (bh - idle_glyph_size) / 2,
-        idle_glyph_size, theme.colors.accent)
-    ui.status_cell.draw({
-        { text = label, color = theme.colors.accent },
-    }, idle_x + idle_glyph_size + idle_glyph_gap, y, bh,
-        { divider = false, accent = true })
+    draw_monitor_status(w, y, bh)
 end
 
 -- ---------- Batch progress overlay ----------

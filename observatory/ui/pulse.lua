@@ -7,6 +7,18 @@ local icon = require("observatory.ui.icon")
 
 local M = {}
 
+function M.alpha(period)
+    period = period or theme.motion.pulse_period
+    local t = (love.timer and love.timer.getTime and love.timer.getTime()) or 0
+    local k = math.abs(((t / period) % 1) * 2 - 1)
+    return 0.5 + 0.5 * k
+end
+
+function M.color(base, period)
+    local a = M.alpha(period)
+    return { base[1], base[2], base[3], (base[4] or 1) * a }
+end
+
 -- opts: color, font, letter_em, period, dot_size, gap.
 function M.draw(caption, x, y, opts)
     opts = opts or {}
@@ -15,10 +27,7 @@ function M.draw(caption, x, y, opts)
     local period = opts.period or theme.motion.pulse_period
     local em = opts.letter_em or 0.08
 
-    local t = (love.timer and love.timer.getTime and love.timer.getTime()) or 0
-    local k = math.abs(((t / period) % 1) * 2 - 1)
-    local alpha = 0.5 + 0.5 * k
-    local pulsed = { color[1], color[2], color[3], (color[4] or 1) * alpha }
+    local pulsed = M.color(color, period)
 
     local dot_size = opts.dot_size or 6
     local gap = opts.gap or 6
