@@ -137,6 +137,19 @@ log_monitor.is_batch_read = is_batch_read
 function log_monitor.last_event() return state.last_event end
 function log_monitor.total_events() return state.total_events end
 
+-- File helpers -------------------------------------------------------------
+
+-- Cache for list_journal_files: spawning `dir`/`ls` on every 250 ms tick is
+-- expensive (cold popen on Windows is ~50–100 ms). We refresh at most every
+-- DIR_CACHE_TTL seconds, or immediately when forced via invalidate_dir_cache().
+local DIR_CACHE_TTL = 5.0
+local dir_cache = { folder = nil, files = nil, expires_at = 0 }
+
+local function invalidate_dir_cache()
+    dir_cache.expires_at = 0
+    dir_cache.files = nil
+end
+
 -- Folder management --------------------------------------------------------
 local function resolve_folder()
     local override = settings.get("JournalFolder")
@@ -160,19 +173,6 @@ function log_monitor.change_watched_directory(path)
     state.status_size = nil
     invalidate_dir_cache()
     resolve_folder()
-end
-
--- File helpers -------------------------------------------------------------
-
--- Cache for list_journal_files: spawning `dir`/`ls` on every 250 ms tick is
--- expensive (cold popen on Windows is ~50–100 ms). We refresh at most every
--- DIR_CACHE_TTL seconds, or immediately when forced via invalidate_dir_cache().
-local DIR_CACHE_TTL = 5.0
-local dir_cache = { folder = nil, files = nil, expires_at = 0 }
-
-local function invalidate_dir_cache()
-    dir_cache.expires_at = 0
-    dir_cache.files = nil
 end
 
 -- Returns sorted list of journal files, oldest first, based on filename.
