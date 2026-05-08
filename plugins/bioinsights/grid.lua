@@ -95,6 +95,19 @@ local function placeholder_ancestor_row(body, body_label)
     }
 end
 
+local function body_header_row(body, body_label)
+    return {
+        ["Body"]     = body_label,
+        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Genus"]    = constants.UNKNOWN_TEXT,
+        ["Species"]  = constants.UNKNOWN_TEXT,
+        ["Variant"]  = constants.UNKNOWN_TEXT,
+        ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
+        ["Value"]    = constants.UNKNOWN_TEXT,
+        ["Distance"] = format_distance(body.distance_ls),
+    }
+end
+
 local function genus_potential_max(genus_entry, genus_label)
     local exact = exact_value_for_entry(genus_entry)
     if exact then return exact end
@@ -174,21 +187,36 @@ local function annotate_hierarchy(row, depth, node_id, raw_body_name)
     return row
 end
 
+local function emit_genus_children(target_grid, body, body_node_id, depth)
+    local sub_indent = hierarchy.indent_prefix(depth)
+    if #body.genus_order == 0 then
+        table.insert(target_grid.rows,
+            annotate_hierarchy(row_for_pending_body(body, sub_indent),
+                depth, body_node_id .. "_pending", ""))
+        return
+    end
+    for _, genus_label in ipairs(body.genus_order) do
+        table.insert(target_grid.rows,
+            annotate_hierarchy(row_for_genus(body, genus_label, sub_indent),
+                depth, body_node_id .. "_g_" .. genus_label, ""))
+    end
+end
+
 local function emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
     local body = bodies[id]
     local raw_name = display_name(body)
     local indented_name = hierarchy.indent_prefix(depth) .. raw_name
-    local node_id = "body_" .. tostring(id)
+    local body_node_id = "body_" .. tostring(id)
     if not body or should_skip_body(body, settings) then
         table.insert(target_grid.rows,
             annotate_hierarchy(placeholder_ancestor_row(body, indented_name),
-                depth, node_id, raw_name))
+                depth, body_node_id, raw_name))
         return
     end
-    for _, row in ipairs(rows_for_body(body, indented_name)) do
-        table.insert(target_grid.rows,
-            annotate_hierarchy(row, depth, node_id, raw_name))
-    end
+    table.insert(target_grid.rows,
+        annotate_hierarchy(body_header_row(body, indented_name),
+            depth, body_node_id, raw_name))
+    emit_genus_children(target_grid, body, body_node_id, depth + 1)
 end
 
 local function rebuild_hierarchical(target_grid, bodies, settings)

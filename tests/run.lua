@@ -298,14 +298,18 @@ do
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings, { group_by_body = true })
 
-    eq(#target.rows, 3, "hierarchical surfaces bio body + 2 ancestors")
+    eq(#target.rows, 4, "hierarchical surfaces 2 ancestors + body header + bio child")
     eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
     truthy(target.rows[2]["Body"]:find("└─ Bio 1", 1, true),
         "intermediate planet carries branch glyph at depth 1")
     truthy(target.rows[3]["Body"]:find("  └─ Bio 1 a", 1, true),
-        "bio body indented one level deeper")
-    eq(target.rows[3]["Genus"], "Bacterium",
-        "bio body row keeps genus data in hierarchical view")
+        "bio body header indented one level deeper")
+    eq(target.rows[3]["Genus"], bi_constants.UNKNOWN_TEXT,
+        "body header row carries no genus")
+    truthy(target.rows[4]["_depth"] == 3,
+        "genus child sits one level below the body header")
+    eq(target.rows[4]["Genus"], "Bacterium",
+        "genus sub-row holds the bio data")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)

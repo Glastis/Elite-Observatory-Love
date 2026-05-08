@@ -99,15 +99,50 @@ local function children_map_from_nodes(nodes)
     return roots, children
 end
 
+local function effective_node_keys(nodes, children, rows, col)
+    local own = {}
+    for i, node in ipairs(nodes) do
+        local first_row = rows[node.row_indices[1]]
+        own[i] = sort_key(sort_value_for(first_row, col))
+    end
+    local computed = {}
+    local effective = {}
+    local function compute(idx)
+        if computed[idx] then return effective[idx] end
+        computed[idx] = true
+        local best = own[idx]
+        for _, kid in ipairs(children[idx] or {}) do
+            local kid_key = compute(kid)
+            if kid_key and (best == nil or kid_key > best) then
+                best = kid_key
+            end
+        end
+        effective[idx] = best
+        return best
+    end
+    for i = 1, #nodes do compute(i) end
+    return effective
+end
+
 local function sorted_hierarchical_rows(rows, col, is_ascending)
     local nodes = build_hierarchy_nodes(rows)
     local roots, children = children_map_from_nodes(nodes)
-    local function key_of(node_idx)
-        local first_row = rows[nodes[node_idx].row_indices[1]]
-        return sort_value_for(first_row, col)
+    local effective = effective_node_keys(nodes, children, rows, col)
+    local function fallback_string(idx)
+        local first_row = rows[nodes[idx].row_indices[1]]
+        return tostring(sort_value_for(first_row, col) or "")
     end
     local function less(a, b)
-        return compare_values(key_of(a), key_of(b), is_ascending)
+        local ka, kb = effective[a], effective[b]
+        if ka and kb then
+            if is_ascending then return ka < kb end
+            return ka > kb
+        end
+        if ka then return is_ascending end
+        if kb then return not is_ascending end
+        local sa, sb = fallback_string(a), fallback_string(b)
+        if is_ascending then return sa < sb end
+        return sa > sb
     end
     table.sort(roots, less)
     for _, kids in pairs(children) do table.sort(kids, less) end
