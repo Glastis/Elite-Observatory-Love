@@ -9,7 +9,7 @@ local NOTIFY_DEFAULT_SYSTEM = "Unknown system"
 
 local Plugin = {
     id = "example",
-    name = "Example Explorer",
+    name = "Explorer",
     short_name = "Explorer",
     version = "0.1.0",
     grid = {
