@@ -28,6 +28,26 @@ function love.load(args)
         return
     end
 
+    for i, a in ipairs(args or {}) do
+        if a == "--script" and args[i + 1] then
+            local script = args[i + 1]
+            local rest = {}
+            for j = i + 2, #args do table.insert(rest, args[j]) end
+            local loader = loadfile(script)
+            if not loader then
+                print("could not load: " .. script)
+                love.event.quit(1)
+                return
+            end
+            arg = { [0] = script }
+            for k, v in ipairs(rest) do arg[k] = v end
+            local ok, err = pcall(loader, arg)
+            if not ok then print("script error: " .. tostring(err)) end
+            love.event.quit(0)
+            return
+        end
+    end
+
     if smoke then
         settings.load()
         if journal_override then
