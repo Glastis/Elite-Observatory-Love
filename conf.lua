@@ -5,7 +5,7 @@ function love.conf(t)
     t.appendidentity = false
     t.version = "11.4"
 
-    t.window.title = "Elite Observatory (LÖVE)"
+    t.window.title = "Elite Observatory"
     t.window.width = 1024
     t.window.height = 640
     t.window.minwidth = 720
