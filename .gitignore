@@ -1,0 +1,5 @@
+/.claude/
+/.idea/
+/not_versionable/
+*.log
+core.*
