@@ -74,9 +74,49 @@ function M.check(x, y, size, color, progress, line_w)
     love.graphics.setLineWidth(prev_lw)
 end
 
+local CIRCLE_MIN_SEGMENTS = 24
+
+local function circle_segments(radius)
+    return math.max(CIRCLE_MIN_SEGMENTS, math.floor(radius * 6 + 0.5))
+end
+
 function M.dot(x, y, size, color)
     love.graphics.setColor(color)
-    love.graphics.circle("fill", x + size / 2, y + size / 2, size / 2)
+    local r = size / 2
+    love.graphics.circle("fill", x + r, y + r, r, circle_segments(r))
+end
+
+function M.triangle_up(x, y, size, color)
+    love.graphics.setColor(color)
+    local cx = x + size / 2
+    love.graphics.polygon("fill",
+        cx, y,
+        x + size, y + size,
+        x, y + size)
+end
+
+function M.triangle_down(x, y, size, color)
+    love.graphics.setColor(color)
+    local cx = x + size / 2
+    love.graphics.polygon("fill",
+        x, y,
+        x + size, y,
+        cx, y + size)
+end
+
+function M.star(x, y, size, color)
+    love.graphics.setColor(color)
+    local cx, cy = x + size / 2, y + size / 2
+    local outer = size / 2
+    local inner = outer * 0.45
+    local pts = {}
+    for i = 0, 9 do
+        local angle = -math.pi / 2 + i * math.pi / 5
+        local r = (i % 2 == 0) and outer or inner
+        table.insert(pts, cx + math.cos(angle) * r)
+        table.insert(pts, cy + math.sin(angle) * r)
+    end
+    love.graphics.polygon("fill", pts)
 end
 
 function M.diamond(x, y, size, color)

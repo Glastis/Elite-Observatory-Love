@@ -1,7 +1,7 @@
 local M = {}
 
 local DEFAULT_INDENT_UNIT = "  "
-local DEFAULT_BRANCH_GLYPH = "└─ "
+local DEFAULT_BRANCH_GLYPH = "  > "
 
 function M.indent_prefix(depth, indent_unit, branch_glyph)
     if depth <= 0 then return "" end

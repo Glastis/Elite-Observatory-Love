@@ -1,16 +1,17 @@
 local theme = require("observatory.ui.theme")
 local input = require("observatory.ui.input")
 local text = require("observatory.ui.text")
+local icon = require("observatory.ui.icon")
 
 local M = {}
 
 local CELL_PADDING_X = 6
 local HEADER_LETTER_EM = 0.08
-local SORT_INDICATOR_ASC = " ▲"
-local SORT_INDICATOR_DESC = " ▼"
-local SORT_SUFFIX_BY_DIRECTION = {
-    ascending  = SORT_INDICATOR_ASC,
-    descending = SORT_INDICATOR_DESC,
+local SORT_GLYPH_GAP = 4
+local SORT_GLYPH_SCALE = 0.55
+local SORT_GLYPHS = {
+    ascending  = icon.triangle_up,
+    descending = icon.triangle_down,
 }
 local UNIT_MULTIPLIERS = { K = 1e3, M = 1e6 }
 local SORT_KEY_PATTERN = "^%-?(%d+%.?%d*)%s*([KM]?)"
@@ -171,9 +172,9 @@ local function sort_direction_key(state)
     return "descending"
 end
 
-local function header_label(col, state)
-    if state.sort_col ~= col then return col end
-    return col .. (SORT_SUFFIX_BY_DIRECTION[sort_direction_key(state)] or "")
+local function header_sort_glyph(col, state)
+    if state.sort_col ~= col then return nil end
+    return SORT_GLYPHS[sort_direction_key(state)]
 end
 
 local function toggle_sort(state, col)
@@ -204,20 +205,43 @@ local function handle_header_click(state, col, hx, hy, hw, hh)
     toggle_sort(state, col)
 end
 
+local function draw_sort_glyph(glyph, ctx, hx, col_align, label_w)
+    local glyph_size = math.floor(ctx.font:getHeight() * SORT_GLYPH_SCALE)
+    local gy = ctx.y + (ctx.row_h - glyph_size) / 2
+    local gx
+    if col_align == "right" then
+        gx = hx + CELL_PADDING_X + ctx.cell_text_w - label_w - SORT_GLYPH_GAP - glyph_size
+    else
+        gx = hx + CELL_PADDING_X + label_w + SORT_GLYPH_GAP
+    end
+    glyph(gx, gy, glyph_size, theme.colors.text_faint)
+end
+
+local function draw_header_cell(col, ctx, state, hx)
+    handle_header_click(state, col, hx, ctx.y, ctx.col_w, ctx.row_h)
+    local glyph = header_sort_glyph(col, state)
+    local glyph_size = math.floor(ctx.font:getHeight() * SORT_GLYPH_SCALE)
+    local reserved = glyph and (glyph_size + SORT_GLYPH_GAP) or 0
+    local label = fit_text(col, ctx.font, HEADER_LETTER_EM,
+        math.max(0, ctx.cell_text_w - reserved))
+    local col_align = ctx.align_by_col[col] or "left"
+    text.draw_v_center(label, hx + CELL_PADDING_X, ctx.y, ctx.row_h, {
+        font = ctx.font, color = theme.colors.text_faint,
+        letter_em = HEADER_LETTER_EM,
+        align = col_align,
+        width = ctx.cell_text_w,
+    })
+    if not glyph then return end
+    local label_w = text.width(label, ctx.font, HEADER_LETTER_EM)
+    draw_sort_glyph(glyph, ctx, hx, col_align, label_w)
+end
+
 local function draw_header(cols, ctx, state, header_color)
     love.graphics.setColor(header_color or theme.colors.panel)
     love.graphics.rectangle("fill", ctx.x, ctx.y, ctx.w, ctx.row_h)
     for i, col in ipairs(cols) do
         local hx = ctx.x + (i - 1) * ctx.col_w
-        handle_header_click(state, col, hx, ctx.y, ctx.col_w, ctx.row_h)
-        local label = fit_text(header_label(col, state),
-            ctx.font, HEADER_LETTER_EM, ctx.cell_text_w)
-        text.draw_v_center(label, hx + CELL_PADDING_X, ctx.y, ctx.row_h, {
-            font = ctx.font, color = theme.colors.text_faint,
-            letter_em = HEADER_LETTER_EM,
-            align = ctx.align_by_col[col] or "left",
-            width = ctx.cell_text_w,
-        })
+        draw_header_cell(col, ctx, state, hx)
     end
     love.graphics.setColor(theme.colors.rule)
     love.graphics.rectangle("fill", ctx.x, ctx.y + ctx.row_h - 1, ctx.w, 1)

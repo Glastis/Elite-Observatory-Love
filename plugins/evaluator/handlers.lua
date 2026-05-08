@@ -44,7 +44,7 @@ local function maybe_notify(body, settings)
     if body.potential_max < settings.minimum_high_value_notify then return end
     notifier({
         title = constants.NOTIFY_TITLE_HIGH_VALUE,
-        detail = string.format("%s (%s) — %d cr",
+        detail = string.format("%s (%s) - %d cr",
             body.name, body.body_type, body.potential_max),
     })
     body.notified_high_value = true

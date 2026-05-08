@@ -60,7 +60,7 @@ local function short_path(p, max_chars)
     local parent = p:match("([^/\\]+)[/\\][^/\\]+$")
     local label = parent and (".../" .. parent .. "/" .. tail) or tail
     if #label > max_chars then
-        label = "…" .. label:sub(-max_chars)
+        label = "..." .. label:sub(-max_chars)
     end
     return label
 end
@@ -171,7 +171,7 @@ local function draw_left_column(x, y, w, h)
     local cy = y + pad_y
     cy = cy + ui.section_header.draw("LOCATIONS", inner_x, cy, inner_w, {
         num = "01",
-        right = "OS · " .. paths.os():upper(),
+        right = "OS / " .. paths.os():upper(),
     }) + 10
 
     -- APP DATA — read-only display of the LÖVE save directory.
@@ -328,7 +328,7 @@ local function draw_right_column(x, y, w, h)
                 title_color = enabled and theme.colors.text or theme.colors.text_dim,
                 subtitle = {
                     { text = "v" .. (p.version or "0"), letter_em = 0.04 },
-                    { text = " · ", letter_em = 0.04 },
+                    { text = " | ", letter_em = 0.04 },
                     {
                         text = enabled and "loaded" or "disabled",
                         color = ui.animation.color_value(slot.status_color),
@@ -490,12 +490,20 @@ local function draw_status_bar(w, h)
     elseif log_monitor.is_monitoring() then label = "REALTIME"
     elseif s == 0 then label = "IDLE"
     else label = "BUSY" end
-    local idle_text = "◆ " .. label
     local idle_font = theme.font("mono", 10)
-    local idle_w = ui.text.width(idle_text, idle_font, 0.1) + 28
+    local idle_glyph_size = math.floor(idle_font:getHeight() * 0.7)
+    local idle_glyph_gap = 6
+    local idle_pad_x = 14
+    local label_w = ui.text.width(label, idle_font, 0.1)
+    local cell_w = label_w + idle_pad_x * 2
+    local idle_x = w - cell_w - idle_glyph_size - idle_glyph_gap
+    ui.icon.diamond(idle_x,
+        y + (bh - idle_glyph_size) / 2,
+        idle_glyph_size, theme.colors.accent)
     ui.status_cell.draw({
-        { text = idle_text, color = theme.colors.accent },
-    }, w - idle_w, y, bh, { divider = false, accent = true })
+        { text = label, color = theme.colors.accent },
+    }, idle_x + idle_glyph_size + idle_glyph_gap, y, bh,
+        { divider = false, accent = true })
 end
 
 -- ---------- Batch progress overlay ----------

@@ -17,11 +17,11 @@ return {
     VALUE_THOUSAND           = 1000,
     VALUE_MILLION_FORMAT     = "%.1fM",
     VALUE_THOUSAND_FORMAT    = "%.1fK",
-    UNKNOWN_TEXT             = "—",
+    UNKNOWN_TEXT             = "-",
 
     TERRAFORM_LABEL_YES      = "Yes",
-    TERRAFORM_LABEL_NO       = "—",
-    MAP_LABEL_YES            = "★",
+    TERRAFORM_LABEL_NO       = "-",
+    MAP_LABEL_YES            = "*",
     MAP_LABEL_NO             = "",
 
     DEFAULT_MIN_BODY_VALUE          = 50000,

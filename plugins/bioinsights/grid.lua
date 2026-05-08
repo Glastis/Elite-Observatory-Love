@@ -71,7 +71,7 @@ local function row_for_pending_body(body, body_label)
     return {
         ["Body"]     = body_label,
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
-        ["Genus"]    = string.format("%s × %d",
+        ["Genus"]    = string.format("%s x %d",
             constants.PENDING_BIO_PLACEHOLDER, body.biological_count),
         ["Species"]  = constants.UNKNOWN_TEXT,
         ["Variant"]  = constants.UNKNOWN_TEXT,

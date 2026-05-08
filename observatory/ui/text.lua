@@ -71,7 +71,7 @@ end
 function M.truncate_left(s, font, max_w, em)
     em = em or 0
     if M.width(s, font, em) <= max_w then return s end
-    local ellipsis = "…"
+    local ellipsis = "..."
     local trimmed = s
     while #trimmed > 0 and M.width(ellipsis .. trimmed, font, em) > max_w do
         trimmed = trimmed:sub(2)
@@ -84,7 +84,7 @@ end
 function M.truncate_right(s, font, max_w, em)
     em = em or 0
     if M.width(s, font, em) <= max_w then return s end
-    local ellipsis = "…"
+    local ellipsis = "..."
     local trimmed = s
     while #trimmed > 0 and M.width(trimmed .. ellipsis, font, em) > max_w do
         trimmed = trimmed:sub(1, -2)
