@@ -1,3 +1,5 @@
+local species_values = require("plugins.bioinsights.species_values")
+
 local state = {}
 
 local data = {
@@ -5,12 +7,30 @@ local data = {
     current_system_address = nil,
 }
 
-local function blank_genus_entry()
+local SPECIES_STATUS = {
+    PENDING   = "pending",
+    CONFIRMED = "confirmed",
+    EXCLUDED  = "excluded",
+}
+
+state.SPECIES_STATUS = SPECIES_STATUS
+
+local function build_initial_species_states(genus_label)
+    local result = {}
+    for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
+        result[species_label] = SPECIES_STATUS.PENDING
+    end
+    return result
+end
+
+local function blank_genus_entry(genus_label)
     return {
-        species_label   = nil,
-        variant_label   = nil,
-        sample_index    = 0,
-        confirmed_value = nil,
+        species_label    = nil,
+        variant_label    = nil,
+        sample_index     = 0,
+        confirmed_value  = nil,
+        species_states   = build_initial_species_states(genus_label),
+        species_order    = species_values.species_in_genus(genus_label),
     }
 end
 
@@ -58,10 +78,31 @@ end
 function state.ensure_genus(body, genus_label)
     if not body or not genus_label then return nil end
     if not body.genus_entries[genus_label] then
-        body.genus_entries[genus_label] = blank_genus_entry()
+        body.genus_entries[genus_label] = blank_genus_entry(genus_label)
         table.insert(body.genus_order, genus_label)
     end
     return body.genus_entries[genus_label]
+end
+
+function state.confirm_species(body, genus_label, species_label, variant_label, sample_index)
+    if not body or not genus_label or not species_label then return end
+    local entry = state.ensure_genus(body, genus_label)
+    entry.species_label   = species_label
+    entry.variant_label   = variant_label or entry.variant_label
+    entry.sample_index    = math.max(entry.sample_index, sample_index or 0)
+    entry.confirmed_value = species_values.for_species(species_label)
+        or entry.confirmed_value
+    if not entry.species_states[species_label] then
+        entry.species_states[species_label] = SPECIES_STATUS.PENDING
+        table.insert(entry.species_order, species_label)
+    end
+    for sibling in pairs(entry.species_states) do
+        if sibling == species_label then
+            entry.species_states[sibling] = SPECIES_STATUS.CONFIRMED
+        else
+            entry.species_states[sibling] = SPECIES_STATUS.EXCLUDED
+        end
+    end
 end
 
 function state.bodies_in_current_system()

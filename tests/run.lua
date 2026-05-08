@@ -299,7 +299,9 @@ do
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings, { group_by_body = true })
 
-    eq(#target.rows, 4, "hierarchical surfaces 2 ancestors + body header + bio child")
+    local bacterium_species_count = 13
+    eq(#target.rows, 3 + bacterium_species_count,
+        "hierarchical surfaces 2 ancestors + body header + one row per Bacterium species")
     eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
     truthy(target.rows[2]["Body"]:find("  > Bio 1", 1, true),
         "intermediate planet carries branch glyph at depth 1")
@@ -311,11 +313,14 @@ do
         "genus child sits one level below the body header")
     eq(target.rows[4]["Genus"], "Bacterium",
         "genus sub-row holds the bio data")
+    eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.pending,
+        "predicted species default to pending status")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, 1, "flat rebuild only keeps the bio body")
-    eq(target.rows[1]["Body"], "Bio 1 a", "flat row shows the bio body")
+    eq(#target.rows, bacterium_species_count,
+        "flat rebuild emits one row per possible species in the bio body")
+    eq(target.rows[1]["Body"], "Bio 1 a", "first row carries the bio body name")
 end
 
 -- evaluator: hierarchical rows carry sort metadata ------------------------
@@ -518,9 +523,19 @@ do
         event = "FSDJump", SystemAddress = 300, StarSystem = "Gamma",
     }, settings)
 
+    local bi_species = require("plugins.bioinsights.species_values")
+    local expected_rows = #bi_species.species_in_genus("Bacterium")
+        + #bi_species.species_in_genus("Frutexa")
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, 2, "bioinsights surfaces bio bodies across visited systems")
+    eq(#target.rows, expected_rows,
+        "bioinsights enumerates possible species across systems with bio")
+    local body_labels = {}
+    for _, row in ipairs(target.rows) do
+        if row["Body"] ~= "" then body_labels[row["Body"]] = true end
+    end
+    truthy(body_labels["Alpha 1"], "Alpha 1 surfaced as a body label")
+    truthy(body_labels["Beta 1"], "Beta 1 surfaced as a body label")
 end
 
 -- evaluator: high-value bodies from prior systems survive an empty jump ----
@@ -608,9 +623,70 @@ do
         event = "FSDJump", SystemAddress = 600, StarSystem = "Session2",
     }, settings)
 
+    local bi_species = require("plugins.bioinsights.species_values")
+    local expected_rows = #bi_species.species_in_genus("Bacterium")
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, 1, "Session1 bio data survives LoadGame on next journal")
+    eq(#target.rows, expected_rows,
+        "Session1 bio data survives LoadGame on next journal")
+end
+
+-- bioinsights: ScanOrganic confirms the species and excludes siblings -----
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 700, StarSystem = "Confirm",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 700, BodyID = 1,
+        BodyName = "Confirm 1", PlanetClass = "Icy body",
+        DistanceFromArrivalLS = 100,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 700, BodyID = 1,
+        BodyName = "Confirm 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "ScanOrganic", SystemAddress = 700, Body = 1,
+        ScanType = "Analyse",
+        Genus_Localised = "Bacterium",
+        Species_Localised = "Bacterium Acies",
+        Variant_Localised = "Bacterium Acies - Cobalt",
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+    local confirmed_rows, excluded_rows = 0, 0
+    local confirmed_species
+    for _, row in ipairs(target.rows) do
+        if row["Status"] == bi_constants.STATUS_LABEL.confirmed then
+            confirmed_rows = confirmed_rows + 1
+            confirmed_species = row["Species"]
+        elseif row["Status"] == bi_constants.STATUS_LABEL.excluded then
+            excluded_rows = excluded_rows + 1
+        end
+    end
+    eq(confirmed_rows, 1, "exactly one species is confirmed for the genus")
+    eq(confirmed_species, "Bacterium Acies",
+        "confirmed species matches ScanOrganic payload")
+    truthy(excluded_rows >= 12, "all sibling species in the genus are excluded")
 end
 
 print(string.format("\n%d tests, %d failures", total, failures))

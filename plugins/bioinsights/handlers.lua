@@ -98,15 +98,7 @@ end
 local function refine_genus_with_species(body, species_label, variant_label, sample_index)
     local genus_label = species_label and species_label:match("^(%S+)") or nil
     if not genus_label then return end
-    local entry = state.ensure_genus(body, genus_label)
-    entry.species_label = species_label
-    entry.variant_label = variant_label or entry.variant_label
-    if sample_index > entry.sample_index then
-        entry.sample_index = sample_index
-    end
-    if sample_index >= constants.SAMPLE_INDEX_FINAL_SCAN then
-        entry.confirmed_value = species_values.for_species(species_label)
-    end
+    state.confirm_species(body, genus_label, species_label, variant_label, sample_index)
 end
 
 local function on_scan_organic(entry)

@@ -1,11 +1,18 @@
 return {
     GRID_COLUMNS = {
-        "Body", "Type", "Genus", "Species",
+        "Body", "Type", "Genus", "Species", "Status",
         "Variant", "Samples", "Value", "Distance",
     },
 
     COLUMN_ALIGN = {
         ["Distance"] = "right",
+        ["Value"]    = "right",
+    },
+
+    STATUS_LABEL = {
+        pending   = "pending",
+        confirmed = "confirmed",
+        excluded  = "excluded",
     },
 
     SIGNAL_KEY_BIOLOGICAL = "$SAA_SignalType_Biological;",

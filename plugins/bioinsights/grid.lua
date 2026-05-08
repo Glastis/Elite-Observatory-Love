@@ -53,6 +53,30 @@ local function format_value_for_genus(genus_entry, genus_label)
         format_number(range.min), format_number(range.max))
 end
 
+local function format_value_for_species(species_label)
+    local exact = species_values.for_species(species_label)
+    if exact and exact > 0 then
+        return string.format(constants.VALUE_FORMAT, format_number(exact))
+    end
+    return constants.UNKNOWN_TEXT
+end
+
+local function species_row_for_status(body, genus_label, species_label, status, body_label)
+    local entry = body.genus_entries[genus_label]
+    local is_confirmed = (status == "confirmed")
+    return {
+        ["Body"]     = body_label,
+        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Genus"]    = genus_label,
+        ["Species"]  = species_label,
+        ["Status"]   = constants.STATUS_LABEL[status] or status,
+        ["Variant"]  = is_confirmed and (entry.variant_label or constants.UNKNOWN_TEXT) or constants.UNKNOWN_TEXT,
+        ["Samples"]  = is_confirmed and (constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?") or constants.SAMPLE_INDEX_TO_LABEL[0],
+        ["Value"]    = format_value_for_species(species_label),
+        ["Distance"] = format_distance(body.distance_ls),
+    }
+end
+
 local function row_for_genus(body, genus_label, body_label)
     local entry = body.genus_entries[genus_label]
     return {
@@ -60,6 +84,7 @@ local function row_for_genus(body, genus_label, body_label)
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = genus_label,
         ["Species"]  = entry.species_label or constants.UNKNOWN_TEXT,
+        ["Status"]   = entry.species_label and constants.STATUS_LABEL.confirmed or constants.STATUS_LABEL.pending,
         ["Variant"]  = entry.variant_label or constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?",
         ["Value"]    = format_value_for_genus(entry, genus_label),
@@ -74,6 +99,7 @@ local function row_for_pending_body(body, body_label)
         ["Genus"]    = string.format("%s x %d",
             constants.PENDING_BIO_PLACEHOLDER, body.biological_count),
         ["Species"]  = constants.UNKNOWN_TEXT,
+        ["Status"]   = constants.STATUS_LABEL.pending,
         ["Variant"]  = constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = constants.UNKNOWN_TEXT,
@@ -88,6 +114,7 @@ local function placeholder_ancestor_row(body, body_label)
             or constants.UNKNOWN_TEXT,
         ["Genus"]    = constants.UNKNOWN_TEXT,
         ["Species"]  = constants.UNKNOWN_TEXT,
+        ["Status"]   = constants.UNKNOWN_TEXT,
         ["Variant"]  = constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = constants.UNKNOWN_TEXT,
@@ -101,6 +128,7 @@ local function body_header_row(body, body_label)
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = constants.UNKNOWN_TEXT,
         ["Species"]  = constants.UNKNOWN_TEXT,
+        ["Status"]   = constants.UNKNOWN_TEXT,
         ["Variant"]  = constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = constants.UNKNOWN_TEXT,
@@ -148,14 +176,33 @@ local function bodies_with_biology(bodies)
     return list
 end
 
+local function rows_for_genus_species(body, genus_label, body_label)
+    local entry = body.genus_entries[genus_label]
+    if not entry or #entry.species_order == 0 then
+        return { row_for_genus(body, genus_label, body_label) }
+    end
+    local rows = {}
+    for i, species_label in ipairs(entry.species_order) do
+        local label = (i == 1) and body_label or ""
+        local status = entry.species_states[species_label] or "pending"
+        table.insert(rows, species_row_for_status(body, genus_label, species_label, status, label))
+    end
+    return rows
+end
+
 local function rows_for_body(body, body_label)
     if #body.genus_order == 0 then
         return { row_for_pending_body(body, body_label) }
     end
     local rows = {}
-    for i, genus_label in ipairs(body.genus_order) do
-        local label = (i == 1) and body_label or ""
-        table.insert(rows, row_for_genus(body, genus_label, label))
+    local emitted_label = false
+    for _, genus_label in ipairs(body.genus_order) do
+        local label = (not emitted_label) and body_label or ""
+        for _, row in ipairs(rows_for_genus_species(body, genus_label, label)) do
+            table.insert(rows, row)
+            label = ""
+            emitted_label = true
+        end
     end
     return rows
 end
@@ -196,9 +243,11 @@ local function emit_genus_children(target_grid, body, body_node_id, depth)
         return
     end
     for _, genus_label in ipairs(body.genus_order) do
-        table.insert(target_grid.rows,
-            annotate_hierarchy(row_for_genus(body, genus_label, sub_indent),
-                depth, body_node_id .. "_g_" .. genus_label, ""))
+        for _, row in ipairs(rows_for_genus_species(body, genus_label, sub_indent)) do
+            table.insert(target_grid.rows,
+                annotate_hierarchy(row, depth,
+                    body_node_id .. "_g_" .. genus_label .. "_" .. (row["Species"] or "?"), ""))
+        end
     end
 end
 
