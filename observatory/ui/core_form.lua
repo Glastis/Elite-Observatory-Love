@@ -464,9 +464,11 @@ local function monitor_status_label()
     return "BUSY"
 end
 
+local REALTIME_PULSE_PERIOD = 5.0
+
 local function monitor_status_color(label)
     if label == "REALTIME" then
-        return ui.pulse.color(theme.colors.success)
+        return ui.pulse.color(theme.colors.success, REALTIME_PULSE_PERIOD)
     end
     return theme.colors.accent
 end
