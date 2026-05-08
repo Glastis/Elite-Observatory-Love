@@ -109,14 +109,9 @@ local function on_saa_signals_found(entry, settings)
     maybe_notify(body, settings)
 end
 
-local function on_load_game(entry)
-    state.reset()
-end
-
 local DISPATCH_TABLE = {
     Location          = on_location_like,
     FSDJump           = on_location_like,
-    LoadGame          = on_load_game,
     Scan              = on_scan,
     SAASignalsFound   = on_saa_signals_found,
 }

@@ -14,9 +14,18 @@ function love.load(args)
     -- the test harness, then exits.
     local smoke = false
     local journal_override
+    local run_tests = false
     for i, a in ipairs(args or {}) do
         if a == "--smoke" then smoke = true
+        elseif a == "--test" then run_tests = true
         elseif a == "--journal" then journal_override = args[i + 1] end
+    end
+
+    if run_tests then
+        local loader = loadfile("tests/run.lua")
+        if loader then loader() end
+        love.event.quit(0)
+        return
     end
 
     if smoke then
@@ -31,9 +40,14 @@ function love.load(args)
             #plugin_manager.list(),
             log_monitor.total_events(),
             log_monitor.last_event()))
+        for _, p in ipairs(plugin_manager.list()) do
+            local rows = p.grid and p.grid.rows or {}
+            print(string.format("  plugin %s: rows=%d", p.id, #rows))
+        end
         love.event.quit(0)
         return
     end
+
 
     -- Linear filtering looks better on the mono labels than nearest.
     love.graphics.setDefaultFilter("linear", "linear", 1)

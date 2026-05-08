@@ -70,6 +70,17 @@ function state.bodies_in_current_system()
     return system.bodies
 end
 
+function state.systems_sorted()
+    local list = {}
+    for address, system in pairs(data.systems) do
+        table.insert(list, { address = address, system = system })
+    end
+    table.sort(list, function(a, b)
+        return (a.system.name or "") < (b.system.name or "")
+    end)
+    return list
+end
+
 function state.reset()
     data.systems = {}
     data.current_system_address = nil

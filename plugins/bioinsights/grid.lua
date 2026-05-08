@@ -239,14 +239,19 @@ local function rebuild_hierarchical(target_grid, bodies, settings)
     })
 end
 
-function grid.rebuild(target_grid, settings, view_options)
-    target_grid.rows = {}
-    local bodies = state.bodies_in_current_system()
+local function rebuild_for_view(target_grid, bodies, settings, view_options)
     if view_options and view_options.group_by_body then
         rebuild_hierarchical(target_grid, bodies, settings)
         return
     end
     rebuild_flat(target_grid, bodies, settings)
+end
+
+function grid.rebuild(target_grid, settings, view_options)
+    target_grid.rows = {}
+    for _, entry in ipairs(state.systems_sorted()) do
+        rebuild_for_view(target_grid, entry.system.bodies, settings, view_options)
+    end
 end
 
 return grid

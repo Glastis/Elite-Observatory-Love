@@ -127,14 +127,9 @@ local function on_codex_entry(entry, settings)
     })
 end
 
-local function on_load_game(_)
-    state.reset()
-end
-
 local DISPATCH_TABLE = {
     Location          = on_location_like,
     FSDJump           = on_location_like,
-    LoadGame          = on_load_game,
     Scan              = on_scan,
     FSSBodySignals    = on_fss_body_signals,
     SAASignalsFound   = on_saa_signals_found,

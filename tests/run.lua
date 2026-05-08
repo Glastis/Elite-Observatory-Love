@@ -179,9 +179,10 @@ do
     truthy(body.was_mapped, "SAA marks body as mapped")
     truthy(body.worth_mapping ~= nil, "SAA re-evaluates worth_mapping")
 
+    local prev_address = evaluator_state.current_system_address()
     evaluator_handlers.dispatch({event = "LoadGame"}, settings)
-    eq(evaluator_state.current_system_address(), nil,
-        "LoadGame resets evaluator state")
+    eq(evaluator_state.current_system_address(), prev_address,
+        "LoadGame keeps accumulated evaluator state across sessions")
 end
 
 -- evaluator: hierarchical grid grouping -----------------------------------
@@ -238,9 +239,9 @@ do
 
     eq(#target.rows, 3, "hierarchical rebuild surfaces ELW and its ancestors")
     eq(target.rows[1]["Body"], "Hier", "root star has no indent")
-    truthy(target.rows[2]["Body"]:find("└─ Hier 1", 1, true),
+    truthy(target.rows[2]["Body"]:find("  > Hier 1", 1, true),
         "rocky parent carried as ancestor with branch glyph")
-    truthy(target.rows[3]["Body"]:find("  └─ Hier 1 a", 1, true),
+    truthy(target.rows[3]["Body"]:find("    > Hier 1 a", 1, true),
         "ELW grandchild indented one level deeper")
 
     target.rows = {}
@@ -300,9 +301,9 @@ do
 
     eq(#target.rows, 4, "hierarchical surfaces 2 ancestors + body header + bio child")
     eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
-    truthy(target.rows[2]["Body"]:find("└─ Bio 1", 1, true),
+    truthy(target.rows[2]["Body"]:find("  > Bio 1", 1, true),
         "intermediate planet carries branch glyph at depth 1")
-    truthy(target.rows[3]["Body"]:find("  └─ Bio 1 a", 1, true),
+    truthy(target.rows[3]["Body"]:find("    > Bio 1 a", 1, true),
         "bio body header indented one level deeper")
     eq(target.rows[3]["Genus"], bi_constants.UNKNOWN_TEXT,
         "body header row carries no genus")
@@ -458,9 +459,158 @@ do
     bi_grid.rebuild(target, settings)
     truthy(#target.rows >= 1, "only_show_high_value with low threshold keeps rows")
 
+    local rows_before_load = #target.rows
     bi_handlers.dispatch({event = "LoadGame"}, settings)
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, 0, "LoadGame resets bioinsights state")
+    eq(#target.rows, rows_before_load,
+        "LoadGame does not wipe accumulated bioinsights state")
+end
+
+-- bioinsights: bodies from prior systems remain visible after a fresh jump --
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 100, StarSystem = "Alpha",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 100, BodyID = 1,
+        BodyName = "Alpha 1", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 100,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 100, BodyID = 1,
+        BodyName = "Alpha 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 200, StarSystem = "Beta",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 200, BodyID = 1,
+        BodyName = "Beta 1", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 100,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 200, BodyID = 1,
+        BodyName = "Beta 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Frutexa" }},
+    }, settings)
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 300, StarSystem = "Gamma",
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+    eq(#target.rows, 2, "bioinsights surfaces bio bodies across visited systems")
+end
+
+-- evaluator: high-value bodies from prior systems survive an empty jump ----
+do
+    local evaluator_state = require("plugins.evaluator.state")
+    local evaluator_handlers = require("plugins.evaluator.handlers")
+    local evaluator_grid = require("plugins.evaluator.grid")
+    local evaluator_constants = require("plugins.evaluator.constants")
+
+    evaluator_state.reset()
+    evaluator_handlers.set_notifier(function(_) end)
+    evaluator_handlers.set_on_change(function() end)
+
+    local settings = {
+        minimum_body_value          = 0,
+        minimum_mapping_value       = 200000,
+        max_distance_elw            = 100000,
+        max_distance_ww             = 100000,
+        max_distance_aw             = 100000,
+        max_distance_atmospheric    = 50000,
+        max_distance_other          = 25000,
+        notify_on_high_value        = false,
+        minimum_high_value_notify   = 500000,
+    }
+
+    evaluator_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 100, StarSystem = "Alpha",
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 100, BodyID = 1,
+        BodyName = "Alpha 1", PlanetClass = "Earthlike body",
+        DistanceFromArrivalLS = 500, TerraformState = "",
+        SurfaceGravity = 9.8, WasDiscovered = true,
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 200, StarSystem = "Empty",
+    }, settings)
+
+    local target = {
+        columns = evaluator_constants.GRID_COLUMNS,
+        rows = {},
+    }
+    evaluator_grid.rebuild(target, settings)
+    eq(#target.rows, 1, "evaluator keeps Alpha's ELW after jumping to Empty")
+    eq(target.rows[1]["Body"], "Alpha 1",
+        "evaluator row identifies Alpha's ELW")
+end
+
+-- bioinsights: data accumulates across journal files split by LoadGame ----
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({event = "LoadGame"}, settings)
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 500, StarSystem = "Session1",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 500, BodyID = 1,
+        BodyName = "Session1 1", PlanetClass = "Rocky body",
+        DistanceFromArrivalLS = 10,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 500, BodyID = 1,
+        BodyName = "Session1 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+
+    bi_handlers.dispatch({event = "LoadGame"}, settings)
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 600, StarSystem = "Session2",
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+    eq(#target.rows, 1, "Session1 bio data survives LoadGame on next journal")
 end
 
 print(string.format("\n%d tests, %d failures", total, failures))
