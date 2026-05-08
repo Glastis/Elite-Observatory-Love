@@ -20,7 +20,12 @@ end
 
 local function format_value(value)
     if not value or value <= 0 then return constants.UNKNOWN_TEXT end
-    return string.format(constants.VALUE_FORMAT, value)
+    if value >= constants.VALUE_MILLION then
+        return string.format(constants.VALUE_MILLION_FORMAT,
+            value / constants.VALUE_MILLION)
+    end
+    return string.format(constants.VALUE_THOUSAND_FORMAT,
+        value / constants.VALUE_THOUSAND)
 end
 
 local function format_terraform(is_terraformable)

@@ -36,6 +36,8 @@ local function draw_header(cols, ctx, header_color)
             ctx.y, ctx.row_h, {
                 font = ctx.font, color = theme.colors.text_faint,
                 letter_em = HEADER_LETTER_EM,
+                align = ctx.align_by_col[col] or "left",
+                width = ctx.cell_text_w,
             })
     end
     love.graphics.setColor(theme.colors.rule)
@@ -50,6 +52,8 @@ local function draw_row(r, cols, ctx, ry, row_color)
         text.draw_v_center(val, ctx.x + (ci - 1) * ctx.col_w + CELL_PADDING_X,
             ry, ctx.row_h, {
                 font = ctx.font, color = row_color or theme.colors.text,
+                align = ctx.align_by_col[col] or "left",
+                width = ctx.cell_text_w,
             })
     end
 end
@@ -115,6 +119,7 @@ function M.draw(state, grid, x, y, w, h, opts)
         cell_text_w  = math.max(0, col_w - CELL_PADDING_X * 2),
         view_y       = y + row_h,
         view_h       = h - row_h,
+        align_by_col = (grid and grid.column_align) or {},
     }
 
     draw_header(cols, ctx, opts.header_color)

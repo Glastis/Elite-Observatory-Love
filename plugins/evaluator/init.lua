@@ -9,6 +9,7 @@ local Plugin = {
     version = "0.1.0",
     grid = {
         columns = constants.GRID_COLUMNS,
+        column_align = constants.COLUMN_ALIGN,
         rows = {},
     },
     default_settings = {

@@ -4,6 +4,10 @@ return {
         "Variant", "Samples", "Value", "Distance",
     },
 
+    COLUMN_ALIGN = {
+        ["Distance"] = "right",
+    },
+
     SIGNAL_KEY_BIOLOGICAL = "$SAA_SignalType_Biological;",
     SIGNAL_KEY_GEOLOGICAL = "$SAA_SignalType_Geological;",
 
@@ -26,6 +30,10 @@ return {
     DISTANCE_FORMAT            = "%.0f Ls",
     VALUE_FORMAT               = "%s cr",
     VALUE_RANGE_FORMAT         = "%s – %s cr",
+    VALUE_MILLION              = 1000000,
+    VALUE_THOUSAND             = 1000,
+    VALUE_MILLION_FORMAT       = "%.1fM",
+    VALUE_THOUSAND_FORMAT      = "%.1fK",
     UNKNOWN_TEXT               = "—",
 
     NOTIFY_TITLE_HIGH_VALUE    = "High-value biological",

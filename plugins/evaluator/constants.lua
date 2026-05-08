@@ -4,10 +4,17 @@ return {
         "Terraform", "Value", "Max Value", "Map", "Volcanism",
     },
 
+    COLUMN_ALIGN = {
+        ["Distance (Ls)"] = "right",
+    },
+
     GRAVITY_DIVIDER          = 9.80665,
     DISTANCE_FORMAT          = "%.0f",
     GRAVITY_FORMAT           = "%.2f",
-    VALUE_FORMAT             = "%d",
+    VALUE_MILLION            = 1000000,
+    VALUE_THOUSAND           = 1000,
+    VALUE_MILLION_FORMAT     = "%.1fM",
+    VALUE_THOUSAND_FORMAT    = "%.1fK",
     UNKNOWN_TEXT             = "—",
 
     TERRAFORM_LABEL_YES      = "Yes",

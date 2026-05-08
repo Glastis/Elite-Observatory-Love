@@ -10,6 +10,7 @@ local Plugin = {
     version = "0.1.0",
     grid = {
         columns = { "Time", "Body", "Type", "Distance (Ls)" },
+        column_align = { ["Distance (Ls)"] = "right" },
         rows = {},
     },
     default_settings = {

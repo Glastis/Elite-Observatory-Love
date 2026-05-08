@@ -6,7 +6,6 @@
 local ui = require("observatory.ui")
 local log_monitor = require("observatory.log_monitor")
 local plugin_manager = require("observatory.plugin_manager")
-local notifications = require("observatory.notifications")
 local export_handler = require("observatory.export_handler")
 local settings = require("observatory.settings")
 local paths = require("observatory.paths")
@@ -400,21 +399,7 @@ local function draw_plugin_body(plugin, w, body_y, body_h)
             label = "EXPORT CSV",
             primary = true,
             on_click = function()
-                local ok, path_or_err =
-                    export_handler.export_csv(plugin, plugin.grid)
-                if ok then
-                    notifications.send({
-                        title = "Exported",
-                        detail = "Saved to " .. path_or_err,
-                        sender = "core",
-                    })
-                else
-                    notifications.send({
-                        title = "Export failed",
-                        detail = tostring(path_or_err),
-                        sender = "core",
-                    })
-                end
+                export_handler.export_csv(plugin, plugin.grid)
             end,
         },
     }
@@ -552,7 +537,6 @@ function core_form.draw()
     draw_body(w, body_y, body_h, tab_index)
 
     draw_status_bar(w, h)
-    notifications.draw()
     draw_batch_overlay(w, h)
 end
 

@@ -5,7 +5,6 @@
 local settings        = require("observatory.settings")
 local log_monitor     = require("observatory.log_monitor")
 local plugin_manager  = require("observatory.plugin_manager")
-local notifications   = require("observatory.notifications")
 local audio_handler   = require("observatory.audio_handler")
 local core_form       = require("observatory.ui.core_form")
 local ui_input        = require("observatory.ui.input")
@@ -62,7 +61,6 @@ function love.update(dt)
     ui_input.begin(dt)
     log_monitor.update(dt)
     audio_handler.update(dt)
-    notifications.tick(dt)
 end
 
 function love.draw()
