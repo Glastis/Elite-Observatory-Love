@@ -17,11 +17,19 @@ local GENUS_HEADER_H      = 22
 local SPECIES_ROW_H       = 22
 local SECTION_GAP         = 6
 local STATUS_BADGE_W      = 18
+local STATUS_BADGE_SIZE   = 9
+local STATUS_BADGE_INSET  = 1
+local STATUS_BADGE_LINE_W = 1.6
+local SCAN_DOTS_TOTAL     = 3
+local SCAN_DOT_RADIUS     = 3
+local SCAN_DOT_GAP        = 4
+local SCAN_DOTS_WIDTH     = SCAN_DOTS_TOTAL * SCAN_DOT_RADIUS * 2
+                            + (SCAN_DOTS_TOTAL - 1) * SCAN_DOT_GAP
 local SCROLLBAR_RESERVE   = 6
 local SCROLLBAR_W         = 3
 local WHEEL_STEP_PX       = 40
 local SPECIES_VARIANT_GAP = 8
-local SUB_PARTS_SEP       = "  •  "
+local SUB_PARTS_SEP       = "  -  "
 local MIN_CARD_W          = 300
 local MAX_COLUMNS         = 4
 
@@ -37,11 +45,55 @@ local STATUS_PREDICTED = "predicted"
 local STATUS_PENDING   = "pending"
 local STATUS_EXCLUDED  = "excluded"
 
+local function draw_check_icon(x, y, size)
+    local s = size - STATUS_BADGE_INSET * 2
+    local ox = x + STATUS_BADGE_INSET
+    local oy = y + STATUS_BADGE_INSET
+    love.graphics.line(
+        ox,             oy + s * 0.55,
+        ox + s * 0.38,  oy + s * 0.92,
+        ox + s,         oy + s * 0.18
+    )
+end
+
+local function draw_arrow_icon(x, y, size)
+    local s = size - STATUS_BADGE_INSET * 2
+    local ox = x + STATUS_BADGE_INSET
+    local oy = y + STATUS_BADGE_INSET
+    love.graphics.polygon("fill",
+        ox + s * 0.20, oy + s * 0.10,
+        ox + s * 0.95, oy + s * 0.50,
+        ox + s * 0.20, oy + s * 0.90
+    )
+end
+
+local function draw_dot_icon(x, y, size)
+    local cx = x + size * 0.5
+    local cy = y + size * 0.5
+    love.graphics.circle("fill", cx, cy, math.max(1, size * 0.18))
+end
+
 local STATUS_BADGE = {
-    [STATUS_CONFIRMED] = { glyph = "✓", color_key = "success"  },
-    [STATUS_PREDICTED] = { glyph = "▸", color_key = "accent"   },
-    [STATUS_PENDING]   = { glyph = "·", color_key = "text_dim" },
+    [STATUS_CONFIRMED] = { draw = draw_check_icon, color_key = "success",  line_w = STATUS_BADGE_LINE_W },
+    [STATUS_PREDICTED] = { draw = draw_arrow_icon, color_key = "accent",   line_w = 1 },
+    [STATUS_PENDING]   = { draw = draw_dot_icon,   color_key = "text_dim", line_w = 1 },
 }
+
+local function scan_dot_color_key(dot_index, scans)
+    if scans >= SCAN_DOTS_TOTAL then return "success" end
+    if dot_index <= scans then return "accent" end
+    return "text_faint"
+end
+
+local function draw_scan_dots(scans, x, y)
+    local cy = y + SCAN_DOT_RADIUS
+    for i = 1, SCAN_DOTS_TOTAL do
+        local cx = x + SCAN_DOT_RADIUS
+            + (i - 1) * (SCAN_DOT_RADIUS * 2 + SCAN_DOT_GAP)
+        love.graphics.setColor(theme.colors[scan_dot_color_key(i, scans)])
+        love.graphics.circle("fill", cx, cy, SCAN_DOT_RADIUS)
+    end
+end
 
 local STATUS_RANK = {
     [STATUS_CONFIRMED] = 1,
@@ -58,8 +110,8 @@ local SPECIES_LABEL_COLOR = {
 }
 
 local GENUS_RIGHT_LABEL = {
-    confirmed = function(entry) return constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] end,
-    predicted = function(_)     return "DSS" end,
+    confirmed = function(entry) return { kind = "scans", scans = entry.sample_index or 0 } end,
+    predicted = function(_)     return { kind = "scans", scans = 0 } end,
     pending   = function(_)     return nil end,
 }
 
@@ -353,17 +405,25 @@ local function draw_card_subheader(card, x, y, w)
     })
 end
 
+local function draw_right_scans(payload, x, y, w)
+    local meta_font = font_for(FONT_META)
+    local dot_y = y + math.floor((meta_font:getHeight() - SCAN_DOT_RADIUS * 2) / 2) + 1
+    draw_scan_dots(payload.scans, x + w - SCAN_DOTS_WIDTH, dot_y)
+end
+
+local GENUS_RIGHT_RENDERERS = {
+    scans = draw_right_scans,
+}
+
 local function draw_genus_header(block, x, y, w)
     local genus_font = font_for(FONT_GENUS)
-    local meta_font  = font_for(FONT_META)
     text.draw(block.label, x, y, {
         font = genus_font, color = theme.colors.text, letter_em = 0.08,
     })
     if not block.right then return end
-    local rw = text.width(block.right, meta_font, 0.08)
-    text.draw(block.right, x + w - rw, y + 1, {
-        font = meta_font, color = theme.colors.text_faint, letter_em = 0.08,
-    })
+    local renderer = GENUS_RIGHT_RENDERERS[block.right.kind]
+    if not renderer then return end
+    renderer(block.right, x, y, w)
 end
 
 local function species_label_color(status)
@@ -372,11 +432,14 @@ local function species_label_color(status)
 end
 
 local function draw_species_badge(sp, x, y)
-    local meta_font = font_for(FONT_META)
+    local species_font = font_for(FONT_SPECIES)
     local badge = STATUS_BADGE[sp.status] or STATUS_BADGE[STATUS_PENDING]
-    text.draw(badge.glyph, x, y + 2, {
-        font = meta_font, color = theme.colors[badge.color_key],
-    })
+    local icon_y = y + math.floor((species_font:getHeight() - STATUS_BADGE_SIZE) / 2)
+    local prev_w = love.graphics.getLineWidth()
+    love.graphics.setLineWidth(badge.line_w)
+    love.graphics.setColor(theme.colors[badge.color_key])
+    badge.draw(x, icon_y, STATUS_BADGE_SIZE)
+    love.graphics.setLineWidth(prev_w)
 end
 
 local function draw_species_variant(variant_label, x, y, max_w)
