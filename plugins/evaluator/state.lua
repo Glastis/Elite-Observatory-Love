@@ -16,6 +16,8 @@ local function blank_body()
         terraformable         = false,
         distance_ls           = 0,
         gravity_ms2           = 0,
+        mass_em               = 0,
+        radius_m              = 0,
         volcanism             = "",
         atmosphere            = "",
         was_discovered        = false,

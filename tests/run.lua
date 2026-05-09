@@ -95,38 +95,76 @@ end
 do
     local body_value = require("plugins.evaluator.body_value")
     local constants = require("plugins.evaluator.constants")
-    local FD = constants.FIRST_DISCOVERY_MULTIPLIER
+    local FD  = constants.FIRST_DISCOVERY_MULTIPLIER
     local MAP = constants.MAPPING_MULTIPLIER
+    local FM  = constants.FIRST_MAPPER_MULTIPLIER
+    local EFF = constants.EFFICIENCY_MULTIPLIER
+    local ODY = constants.ODYSSEY_MAPPING_MULTIPLIER
+
+    local function mass_factor(m)
+        return 1 + (constants.MASS_FACTOR_NUMERATOR
+            * (m ^ constants.MASS_EXPONENT))
+            / constants.MASS_FACTOR_DENOMINATOR
+    end
+
+    local function planet_base(class_entry, terraformable, mass)
+        local k = class_entry.k + (terraformable and class_entry.kt or 0)
+        return k * mass_factor(mass)
+    end
+
+    local elw_entry = constants.PLANET_K_BY_TYPE["Earthlike body"]
+    local hmc_entry = constants.PLANET_K_BY_TYPE["High metal content body"]
 
     local body = {
         is_star = false, body_type = "Earthlike body",
         terraformable = false,
         was_discovered = true, was_mapped = false,
+        mass_em = constants.DEFAULT_MASS_EM,
     }
     body_value.compute(body)
-    eq(body.current_value, 268000, "ELW current value (already discovered)")
-    eq(body.potential_max, math.floor(268000 * MAP),
-        "ELW potential max (already discovered, not mapped)")
+    local elw_default_base = planet_base(elw_entry, false, constants.DEFAULT_MASS_EM)
+    eq(body.current_value, math.floor(elw_default_base),
+        "ELW default-mass current value (already discovered)")
+    eq(body.potential_max,
+        math.floor(elw_default_base * MAP * EFF * ODY * FM),
+        "ELW default-mass potential max (mapped, first mapper, efficient)")
 
     body = {
         is_star = false, body_type = "Earthlike body",
         terraformable = true,
         was_discovered = false, was_mapped = false,
+        mass_em = constants.DEFAULT_MASS_EM,
     }
     body_value.compute(body)
-    eq(body.current_value, math.floor((268000 + 132000) * FD),
-        "ELW terraformable first-discovery current value")
+    eq(body.current_value, math.floor(elw_default_base * FD),
+        "ELW first-discovery current value")
     eq(body.potential_max,
-        math.floor(math.floor((268000 + 132000) * MAP) * FD),
-        "ELW terraformable FD+FM potential max")
+        math.floor(elw_default_base * MAP * EFF * ODY * FM * FD),
+        "ELW FD+FM potential max")
+
+    body = {
+        is_star = false, body_type = "High metal content body",
+        terraformable = true,
+        was_discovered = true, was_mapped = false,
+        mass_em = 0.8,
+    }
+    body_value.compute(body)
+    local hmc_b22_base = planet_base(hmc_entry, true, 0.8)
+    eq(body.potential_max,
+        math.floor(hmc_b22_base * MAP * EFF * ODY * FM),
+        "HMC terraformable mass=0.8 potential max with Odyssey bonus")
+    truthy(body.potential_max > 1000000 and body.potential_max < 1050000,
+        "HMC TF mass=0.8 lands near 1.02M cr (b22-1 4 regression)")
 
     body = {
         is_star = true, body_type = "O",
         was_discovered = true,
     }
     body_value.compute(body)
-    eq(body.current_value, 3500, "Star O current value")
-    eq(body.potential_max, 3500, "Star potential equals current")
+    eq(body.current_value, constants.STAR_K_BY_TYPE.O,
+        "Star O current value uses canonical k coefficient")
+    eq(body.potential_max, body.current_value,
+        "Star potential equals current")
 end
 
 -- evaluator: handlers dispatch + notification dedup -----------------------

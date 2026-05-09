@@ -87,6 +87,8 @@ local function on_scan(entry, settings)
     body.is_landable    = entry.Landable == true
     body.terraformable  = is_terraformable(entry)
     body.gravity_ms2    = entry.SurfaceGravity or 0
+    body.mass_em        = entry.MassEM or body.mass_em
+    body.radius_m       = entry.Radius or body.radius_m
     body.volcanism      = entry.Volcanism or ""
     body.atmosphere     = entry.Atmosphere or ""
     body.was_discovered = entry.WasDiscovered == true

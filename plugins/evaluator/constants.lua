@@ -39,39 +39,45 @@ return {
         ["Ammonia world"]  = "max_distance_aw",
     },
 
-    BODY_BASE_VALUES = {
-        ["Earthlike body"]            = 268000,
-        ["Water world"]               = 155000,
-        ["Ammonia world"]             = 232000,
-        ["High metal content body"]   = 12500,
-        ["Metal rich body"]           = 21800,
-        ["Rocky body"]                = 500,
-        ["Icy body"]                  = 500,
-        ["Rocky ice body"]            = 500,
-        ["Sudarsky class I gas giant"]   = 1500,
-        ["Sudarsky class II gas giant"]  = 24000,
-        ["Sudarsky class III gas giant"] = 1500,
-        ["Sudarsky class IV gas giant"]  = 1500,
-        ["Sudarsky class V gas giant"]   = 1500,
+    PLANET_K_BY_TYPE = {
+        ["Metal rich body"]              = { k = 21790, kt = 65631 },
+        ["High metal content body"]      = { k = 9654,  kt = 100677 },
+        ["Earthlike body"]               = { k = 64831 + 116295, kt = 0 },
+        ["Water world"]                  = { k = 64831, kt = 116295 },
+        ["Ammonia world"]                = { k = 96932, kt = 0 },
+        ["Sudarsky class I gas giant"]   = { k = 1656,  kt = 0 },
+        ["Sudarsky class II gas giant"]  = { k = 9654,  kt = 100677 },
+        ["Sudarsky class III gas giant"] = { k = 1656,  kt = 0 },
+        ["Sudarsky class IV gas giant"]  = { k = 1656,  kt = 0 },
+        ["Sudarsky class V gas giant"]   = { k = 1656,  kt = 0 },
     },
 
-    BODY_TERRAFORM_BONUS = {
-        ["Earthlike body"]            = 132000,
-        ["Water world"]               = 65000,
-        ["High metal content body"]   = 50000,
-        ["Rocky body"]                = 50000,
-    },
+    DEFAULT_PLANET_K  = 300,
+    DEFAULT_PLANET_KT = 93328,
 
-    STAR_BASE_VALUES = {
-        O = 3500, B = 2500, A = 2000, F = 1500, G = 1500,
-        K = 1500, M = 1500, L = 1500, T = 1500, Y = 1500,
+    STAR_K_BY_TYPE = {
+        O = 1200, B = 1200, A = 1200, F = 1200, G = 1200,
+        K = 1200, M = 1200, L = 1200, T = 1200, Y = 1200,
+        TTS = 1200, AeBe = 1200,
         DA = 14057, DB = 14057, DC = 14057, DO = 14057,
         DQ = 14057, DX = 14057, DZ = 14057,
         N = 22628, H = 22628,
     },
 
+    DEFAULT_STAR_K = 1200,
+
+    MASS_FACTOR_NUMERATOR   = 3,
+    MASS_FACTOR_DENOMINATOR = 5.3,
+    MASS_EXPONENT           = 0.199977,
+    DEFAULT_MASS_EM         = 1,
+
+    MAPPING_MULTIPLIER         = 3.333333333,
+    FIRST_MAPPER_MULTIPLIER    = 1.10967676,
+    EFFICIENCY_MULTIPLIER      = 1.25,
+    ODYSSEY_MAPPING_MULTIPLIER = 1.3,
     FIRST_DISCOVERY_MULTIPLIER = 2.6,
-    MAPPING_MULTIPLIER         = 3.3333333333,
+
+    MIN_BODY_VALUE = 500,
 
     NOTIFY_TITLE_HIGH_VALUE = "High-value body",
     NOTIFY_TITLE_TERRAFORM  = "Terraformable",
