@@ -800,5 +800,212 @@ do
         "body value collapses to single confirmed species value")
 end
 
+-- bioinsights: reproduce tmp.png reference grid -----------------------------
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    local function fsd(addr, name)
+        bi_handlers.dispatch({
+            event = "FSDJump", SystemAddress = addr, StarSystem = name,
+        }, settings)
+    end
+
+    local function scan_star(addr, body_id, body_name, star_type)
+        bi_handlers.dispatch({
+            event = "Scan", SystemAddress = addr, BodyID = body_id,
+            BodyName = body_name, StarType = star_type,
+            DistanceFromArrivalLS = 0,
+            Parents = {},
+        }, settings)
+    end
+
+    local function scan_body(opts)
+        bi_handlers.dispatch({
+            event = "Scan", SystemAddress = opts.system, BodyID = opts.id,
+            BodyName = opts.name, PlanetClass = opts.planet_class,
+            AtmosphereType = opts.atmosphere or "",
+            SurfaceGravity = opts.gravity_ms2 or 0,
+            SurfaceTemperature = opts.temperature_k or 0,
+            SurfacePressure = opts.pressure_pa or 0,
+            Volcanism = opts.volcanism or "",
+            DistanceFromArrivalLS = opts.distance_ls or 0,
+            Parents = opts.parents or {{ Star = 0 }},
+        }, settings)
+    end
+
+    local function saa(opts)
+        local genuses = {}
+        for _, label in ipairs(opts.genuses) do
+            table.insert(genuses, { Genus_Localised = label })
+        end
+        bi_handlers.dispatch({
+            event = "SAASignalsFound", SystemAddress = opts.system,
+            BodyID = opts.id, BodyName = opts.name,
+            Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL,
+                Count = #genuses }},
+            Genuses = genuses,
+        }, settings)
+    end
+
+    local function scan_organic(opts)
+        bi_handlers.dispatch({
+            event = "ScanOrganic", SystemAddress = opts.system, Body = opts.id,
+            ScanType = "Analyse",
+            Species_Localised = opts.species,
+            Variant_Localised = opts.variant,
+        }, settings)
+    end
+
+    local SYS_VG_Q_b23_0 = 1001
+    local SYS_VG_Q_b23_1 = 1011
+    local SYS_QA_S_b22_1 = 1002
+
+    fsd(SYS_VG_Q_b23_0, "Prua Dryoae VG-Q b23-0")
+    scan_star(SYS_VG_Q_b23_0, 0, "Prua Dryoae VG-Q b23-0", "M")
+    scan_body({
+        system = SYS_VG_Q_b23_0, id = 3, name = "Prua Dryoae VG-Q b23-0 B 3",
+        planet_class = "Icy body", atmosphere = "Neon",
+        gravity_ms2 = 4.0, temperature_k = 30.0, pressure_pa = 500.0,
+        distance_ls = 500.0,
+    })
+    saa({ system = SYS_VG_Q_b23_0, id = 3,
+        name = "Prua Dryoae VG-Q b23-0 B 3", genuses = { "Bacterium" } })
+    scan_organic({ system = SYS_VG_Q_b23_0, id = 3,
+        species = "Bacterium Acies",
+        variant = "Bacterium Acies - Cobalt" })
+
+    fsd(SYS_VG_Q_b23_1, "Prua Dryoae VG-Q b23-1")
+    scan_star(SYS_VG_Q_b23_1, 0, "Prua Dryoae VG-Q b23-1", "M")
+    scan_body({
+        system = SYS_VG_Q_b23_1, id = 6, name = "Prua Dryoae VG-Q b23-1 B 6",
+        planet_class = "Icy body", atmosphere = "Neon",
+        gravity_ms2 = 4.0, temperature_k = 30.0, pressure_pa = 500.0,
+        distance_ls = 500.0,
+    })
+    saa({ system = SYS_VG_Q_b23_1, id = 6,
+        name = "Prua Dryoae VG-Q b23-1 B 6", genuses = { "Bacterium" } })
+    scan_organic({ system = SYS_VG_Q_b23_1, id = 6,
+        species = "Bacterium Acies",
+        variant = "Bacterium Acies - Lime" })
+
+    fsd(SYS_QA_S_b22_1, "Prua Dryoae QA-S b22-1")
+    scan_star(SYS_QA_S_b22_1, 0, "Prua Dryoae QA-S b22-1", "M")
+
+    scan_body({
+        system = SYS_QA_S_b22_1, id = 7, name = "Prua Dryoae QA-S b22-1 7 b",
+        planet_class = "Rocky body", atmosphere = "CarbonDioxide",
+        gravity_ms2 = 1.5, temperature_k = 170.0, pressure_pa = 5000.0,
+        distance_ls = 500.0,
+    })
+    saa({ system = SYS_QA_S_b22_1, id = 7,
+        name = "Prua Dryoae QA-S b22-1 7 b",
+        genuses = { "Bacterium", "Frutexa", "Stratum" } })
+    scan_organic({ system = SYS_QA_S_b22_1, id = 7,
+        species = "Frutexa Acus",
+        variant = "Frutexa Acus - Grey" })
+    scan_organic({ system = SYS_QA_S_b22_1, id = 7,
+        species = "Stratum Paleas",
+        variant = "Stratum Paleas - Green" })
+
+    scan_body({
+        system = SYS_QA_S_b22_1, id = 8, name = "Prua Dryoae QA-S b22-1 8 g",
+        planet_class = "Icy body", atmosphere = "ArgonRich",
+        gravity_ms2 = 2.5, temperature_k = 90.0, pressure_pa = 2500.0,
+        distance_ls = 500.0,
+    })
+    saa({ system = SYS_QA_S_b22_1, id = 8,
+        name = "Prua Dryoae QA-S b22-1 8 g", genuses = { "Fonticulua" } })
+    scan_organic({ system = SYS_QA_S_b22_1, id = 8,
+        species = "Fonticulua Upupam",
+        variant = "Fonticulua Upupam - Amethyst" })
+
+    scan_body({
+        system = SYS_QA_S_b22_1, id = 9, name = "Prua Dryoae QA-S b22-1 9 d",
+        planet_class = "Icy body", atmosphere = "Argon",
+        gravity_ms2 = 2.0, temperature_k = 65.0, pressure_pa = 600.0,
+        volcanism = "minor nitrogen magma volcanism",
+        distance_ls = 500.0,
+    })
+    saa({ system = SYS_QA_S_b22_1, id = 9,
+        name = "Prua Dryoae QA-S b22-1 9 d",
+        genuses = { "Bacterium", "Fonticulua", "Fumerola" } })
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+    local visible = {}
+    local current_body = ""
+    for _, row in ipairs(target.rows) do
+        if row["Body"] and row["Body"] ~= "" then
+            current_body = row["Body"]
+        end
+        local species = row["Species"] or "?"
+        visible[current_body] = visible[current_body] or {}
+        visible[current_body][species] = {
+            status  = row["Status"] or "?",
+            variant = row["Variant"] or "",
+        }
+    end
+
+    local EXPECTED_PER_BODY = {
+        ["Prua Dryoae VG-Q b23-0 B 3"] = {
+            { species = "Bacterium Acies",       status = "confirmed", variant = "Bacterium Acies - Cobalt" },
+        },
+        ["Prua Dryoae VG-Q b23-1 B 6"] = {
+            { species = "Bacterium Acies",       status = "confirmed", variant = "Bacterium Acies - Lime" },
+        },
+        ["Prua Dryoae QA-S b22-1 7 b"] = {
+            { species = "Bacterium Aurasus",     status = "pending",   variant = "Teal" },
+            { species = "Frutexa Acus",          status = "confirmed", variant = "Frutexa Acus - Grey" },
+            { species = "Stratum Paleas",        status = "confirmed", variant = "Stratum Paleas - Green" },
+        },
+        ["Prua Dryoae QA-S b22-1 8 g"] = {
+            { species = "Fonticulua Upupam",     status = "confirmed", variant = "Fonticulua Upupam - Amethyst" },
+        },
+        ["Prua Dryoae QA-S b22-1 9 d"] = {
+            { species = "Bacterium Omentum",     status = "pending",   variant = "White or Blue" },
+            { species = "Bacterium Tela",        status = "pending",   variant = "Orange or Green" },
+            { species = "Bacterium Vesicula",    status = "pending",   variant = "Gold" },
+            { species = "Fonticulua Campestris", status = "pending",   variant = "Amethyst" },
+            { species = "Fumerola Nitris",       status = "pending",   variant = "Peach or Aquamarine" },
+        },
+    }
+
+    for body_name, expected_species in pairs(EXPECTED_PER_BODY) do
+        local body_rows = visible[body_name] or {}
+        for _, expected in ipairs(expected_species) do
+            local actual = body_rows[expected.species]
+            eq(actual and actual.status or nil, expected.status,
+                string.format("tmp.png %s | %s should be %s",
+                    body_name, expected.species, expected.status))
+            if expected.variant then
+                eq(actual and actual.variant or nil, expected.variant,
+                    string.format("tmp.png %s | %s variant should be %s",
+                        body_name, expected.species, expected.variant))
+            end
+        end
+        local expected_set = {}
+        for _, e in ipairs(expected_species) do expected_set[e.species] = true end
+        for species, _ in pairs(body_rows) do
+            truthy(expected_set[species],
+                string.format("tmp.png %s | %s appears in grid but is not in screenshot",
+                    body_name, species))
+        end
+    end
+end
+
 print(string.format("\n%d tests, %d failures", total, failures))
 os.exit(failures == 0 and 0 or 1)
