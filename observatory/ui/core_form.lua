@@ -473,8 +473,17 @@ end
 
 -- ---------- Plugin tab ----------
 
+local function row_count_text(plugin)
+    if plugin.row_count_label then return plugin:row_count_label() end
+    if plugin.grid then
+        return string.format("%d ROWS", #(plugin.grid.rows or {}))
+    end
+    return ""
+end
+
 local function draw_row_count(plugin, x_right, y, h, font)
-    local row_count = string.format("%d ROWS", #(plugin.grid.rows or {}))
+    local row_count = row_count_text(plugin)
+    if row_count == "" then return end
     local rc_w = ui.text.width(row_count, font, 0.1)
     ui.text.draw_v_center(row_count, x_right - rc_w, y, h, {
         font = font, color = theme.colors.text_faint, letter_em = 0.1,
@@ -552,7 +561,7 @@ local function draw_plugin_body(plugin, x, body_y, w, body_h)
             right = "v" .. (plugin.version or "0.0"),
         }) + 10
 
-    if not plugin.grid then
+    if not plugin.draw_view and not plugin.grid then
         ui.text.draw("This plugin has no grid.",
             x, body_y + body_h / 2 - 8, {
                 font = theme.font("mono", 11),
@@ -570,9 +579,17 @@ local function draw_plugin_body(plugin, x, body_y, w, body_h)
     cy = cy + toolbar_h + 12
 
     state.grid_state[plugin.id] = state.grid_state[plugin.id] or {}
+    local available_h = body_y + body_h - cy - pad_y
+
+    if plugin.draw_view then
+        plugin:draw_view(state.grid_state[plugin.id],
+            inner_x, cy, inner_w, available_h)
+        return
+    end
+
     state.grid_state[plugin.id] = ui.grid.draw(
         state.grid_state[plugin.id], plugin.grid,
-        inner_x, cy, inner_w, body_y + body_h - cy - pad_y)
+        inner_x, cy, inner_w, available_h)
 end
 
 -- ---------- Combined view tab ----------

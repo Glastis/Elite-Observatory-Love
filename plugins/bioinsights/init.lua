@@ -1,6 +1,6 @@
 local constants = require("plugins.bioinsights.constants")
 local handlers = require("plugins.bioinsights.handlers")
-local grid_builder = require("plugins.bioinsights.grid")
+local card_view = require("plugins.bioinsights.card_view")
 local state = require("plugins.bioinsights.state")
 
 local Plugin = {
@@ -8,11 +8,6 @@ local Plugin = {
     name = "Observatory Bio Insights",
     short_name = "BioInsights",
     version = "0.1.0",
-    grid = {
-        columns = constants.GRID_COLUMNS,
-        column_align = constants.COLUMN_ALIGN,
-        rows = {},
-    },
     default_settings = {
         notify_on_high_value   = true,
         notify_on_new_codex    = true,
@@ -31,12 +26,6 @@ local function ensure_settings(plugin)
     end
 end
 
-local function refresh_grid()
-    grid_builder.rebuild(Plugin.grid, Plugin.settings, {
-        group_by_body = Plugin.group_by_body,
-    })
-end
-
 local function sync_state_context()
     state.set_user_context({
         near_nebula   = Plugin.near_nebula,
@@ -47,7 +36,6 @@ end
 local function apply_user_context_change()
     sync_state_context()
     state.refresh_all_constraints()
-    refresh_grid()
 end
 
 local function send_notification(args)
@@ -59,9 +47,7 @@ function Plugin:load(core)
     core_ref = core
     ensure_settings(self)
     handlers.set_notifier(send_notification)
-    handlers.set_on_change(refresh_grid)
     sync_state_context()
-    refresh_grid()
 end
 
 function Plugin:journal_event(entry)
@@ -69,11 +55,6 @@ function Plugin:journal_event(entry)
 end
 
 function Plugin:status_change(_)
-end
-
-function Plugin:set_grouping(is_enabled)
-    self.group_by_body = is_enabled and true or false
-    refresh_grid()
 end
 
 function Plugin:set_near_nebula(is_enabled)
@@ -84,6 +65,14 @@ end
 function Plugin:set_near_guardian(is_enabled)
     self.near_guardian = is_enabled and true or false
     apply_user_context_change()
+end
+
+function Plugin:draw_view(view_state, x, y, w, h)
+    return card_view.draw(view_state, x, y, w, h, self.settings)
+end
+
+function Plugin:row_count_label()
+    return string.format("%d BODIES", card_view.card_count(self.settings))
 end
 
 return Plugin

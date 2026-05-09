@@ -72,11 +72,15 @@ function M.truncate_left(s, font, max_w, em)
     em = em or 0
     if M.width(s, font, em) <= max_w then return s end
     local ellipsis = "..."
-    local trimmed = s
-    while #trimmed > 0 and M.width(ellipsis .. trimmed, font, em) > max_w do
-        trimmed = trimmed:sub(2)
+    local count = utf8.len(s) or 0
+    for skip = 1, count do
+        local byte_pos = utf8.offset(s, skip + 1)
+        local trimmed = byte_pos and s:sub(byte_pos) or ""
+        if M.width(ellipsis .. trimmed, font, em) <= max_w then
+            return ellipsis .. trimmed
+        end
     end
-    return ellipsis .. trimmed
+    return ellipsis
 end
 
 -- Crop from the right with an ellipsis. Used by single-line input fields so
@@ -85,11 +89,15 @@ function M.truncate_right(s, font, max_w, em)
     em = em or 0
     if M.width(s, font, em) <= max_w then return s end
     local ellipsis = "..."
-    local trimmed = s
-    while #trimmed > 0 and M.width(trimmed .. ellipsis, font, em) > max_w do
-        trimmed = trimmed:sub(1, -2)
+    local count = utf8.len(s) or 0
+    for keep = count - 1, 0, -1 do
+        local byte_end = utf8.offset(s, keep + 1)
+        local trimmed = byte_end and s:sub(1, byte_end - 1) or ""
+        if M.width(trimmed .. ellipsis, font, em) <= max_w then
+            return trimmed .. ellipsis
+        end
     end
-    return trimmed .. ellipsis
+    return ellipsis
 end
 
 function M.font(spec)
