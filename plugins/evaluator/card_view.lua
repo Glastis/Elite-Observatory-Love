@@ -27,12 +27,16 @@ local MIN_CARD_W           = 320
 local MAX_COLUMNS          = 4
 local UNNAMED_PLACEHOLDER  = "(unscanned)"
 
-local FONT_TITLE  = { family = "main_medium", size = 14 }
-local FONT_VALUE  = { family = "mono",        size = 11 }
-local FONT_SUB    = { family = "mono",        size = 10 }
-local FONT_BADGE  = { family = "mono_medium", size = 9  }
-local FONT_FOOTER = { family = "mono",        size = 10 }
-local FONT_EMPTY  = { family = "mono",        size = 11 }
+local FONT_TITLE    = { family = "main_medium", size = 14 }
+local FONT_VALUE    = { family = "mono",        size = 11 }
+local FONT_DISTANCE = { family = "mono_medium", size = 11 }
+local FONT_SUB      = { family = "mono",        size = 10 }
+local FONT_BADGE    = { family = "mono_medium", size = 9  }
+local FONT_FOOTER   = { family = "mono",        size = 10 }
+local FONT_EMPTY    = { family = "mono",        size = 11 }
+
+local TITLE_TRAILING_GAP = 12
+local TITLE_VALUE_GAP    = 14
 
 local HIGH_VALUE_BOLD_THRESHOLD = 2 * 1000000
 
@@ -141,7 +145,6 @@ local function build_subheader_parts(body)
     local parts = {}
     append_part(parts, body_type_label(body))
     append_part(parts, format_gravity(body.gravity_ms2))
-    append_part(parts, format_distance(body.distance_ls))
     if body.atmosphere and body.atmosphere ~= "" then
         append_part(parts, body.atmosphere)
     end
@@ -274,15 +277,16 @@ end
 local function build_card(body, system_name, hide_system)
     local title = display_body_name(body, system_name, hide_system)
     local card  = {
-        body         = body,
-        system_name  = system_name,
-        title        = title,
-        sub_parts    = build_subheader_parts(body),
-        value_text   = format_value_str(predicted_value(body)),
+        body          = body,
+        system_name   = system_name,
+        title         = title,
+        sub_parts     = build_subheader_parts(body),
+        value_text    = format_value_str(predicted_value(body)),
+        distance_text = format_distance(body.distance_ls),
         is_high_value = predicted_value(body) >= HIGH_VALUE_BOLD_THRESHOLD,
-        badges       = build_badges(body),
-        footer       = build_footer(body),
-        sort_value   = predicted_value(body),
+        badges        = build_badges(body),
+        footer        = build_footer(body),
+        sort_value    = predicted_value(body),
     }
     return card
 end
@@ -371,14 +375,21 @@ end
 local function draw_card_title(card, x, y, w)
     local title_font = font_for(FONT_TITLE)
     local value_font = font_for(FONT_VALUE)
-    local rw = text.width(card.value_text, value_font, 0.1)
-    local title_w = math.max(0, w - rw - 12)
+    local dist_font  = font_for(FONT_DISTANCE)
+    local value_w = text.width(card.value_text, value_font, 0.1)
+    local dist_w  = text.width(card.distance_text, dist_font, 0.05)
+    local value_x = x + w - value_w
+    local dist_x  = value_x - dist_w - TITLE_VALUE_GAP
+    local title_w = math.max(0, dist_x - x - TITLE_TRAILING_GAP)
     local fitted = text.truncate_right(card.title, title_font, title_w, 0)
     text.draw(fitted, x, y, {
         font = title_font, color = theme.colors.text,
         bold = card.is_high_value,
     })
-    text.draw(card.value_text, x + w - rw, y + 2, {
+    text.draw(card.distance_text, dist_x, y + 2, {
+        font = dist_font, color = theme.colors.text, letter_em = 0.05,
+    })
+    text.draw(card.value_text, value_x, y + 2, {
         font = value_font, color = theme.colors.accent, letter_em = 0.1,
         bold = card.is_high_value,
     })
