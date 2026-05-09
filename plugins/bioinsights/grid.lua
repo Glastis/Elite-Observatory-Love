@@ -61,6 +61,70 @@ local function format_value_for_species(species_label)
     return constants.UNKNOWN_TEXT
 end
 
+local function genus_value_bounds(body, genus_label)
+    local entry = body.genus_entries[genus_label]
+    if not entry then
+        local range = species_values.for_genus(genus_label)
+        if range then return range.min, range.max end
+        return 0, 0
+    end
+    local lo, hi
+    for species_label, status in pairs(entry.species_states) do
+        if status ~= "excluded" then
+            local v = species_values.for_species(species_label) or 0
+            if status == "confirmed" then return v, v end
+            if not lo or v < lo then lo = v end
+            if not hi or v > hi then hi = v end
+        end
+    end
+    if not lo then return 0, 0 end
+    return lo, hi
+end
+
+local function body_value_bounds(body)
+    local total_lo, total_hi = 0, 0
+    if not body.genus_order or #body.genus_order == 0 then
+        return 0, 0
+    end
+    for _, genus_label in ipairs(body.genus_order) do
+        local lo, hi = genus_value_bounds(body, genus_label)
+        total_lo = total_lo + lo
+        total_hi = total_hi + hi
+    end
+    return total_lo, total_hi
+end
+
+local function format_body_value(body)
+    local lo, hi = body_value_bounds(body)
+    if hi <= 0 then return constants.UNKNOWN_TEXT end
+    if lo == hi then
+        return string.format(constants.VALUE_FORMAT, format_number(lo))
+    end
+    return string.format(constants.VALUE_RANGE_FORMAT,
+        format_number(lo), format_number(hi))
+end
+
+local function format_star(body)
+    if body.parent_star_type and body.parent_star_type ~= "" then
+        return body.parent_star_type
+    end
+    return constants.UNKNOWN_TEXT
+end
+
+local function format_bios(body)
+    if body.biological_count and body.biological_count > 0 then
+        return tostring(body.biological_count)
+    end
+    return constants.UNKNOWN_TEXT
+end
+
+local function decorate_with_body_data(row, body)
+    row["Star"]        = format_star(body)
+    row["Bios"]        = format_bios(body)
+    row["Body Value"]  = format_body_value(body)
+    return row
+end
+
 local function species_row_for_status(body, genus_label, species_label, status, body_label)
     local entry = body.genus_entries[genus_label]
     local is_confirmed = (status == "confirmed")
@@ -211,7 +275,7 @@ local function rebuild_flat(target_grid, bodies, settings)
     for _, body in ipairs(bodies_with_biology(bodies)) do
         if not should_skip_body(body, settings) then
             for _, row in ipairs(rows_for_body(body, body.name)) do
-                table.insert(target_grid.rows, row)
+                table.insert(target_grid.rows, decorate_with_body_data(row, body))
             end
         end
     end
@@ -238,14 +302,14 @@ local function emit_genus_children(target_grid, body, body_node_id, depth)
     local sub_indent = hierarchy.indent_prefix(depth)
     if #body.genus_order == 0 then
         table.insert(target_grid.rows,
-            annotate_hierarchy(row_for_pending_body(body, sub_indent),
+            annotate_hierarchy(decorate_with_body_data(row_for_pending_body(body, sub_indent), body),
                 depth, body_node_id .. "_pending", ""))
         return
     end
     for _, genus_label in ipairs(body.genus_order) do
         for _, row in ipairs(rows_for_genus_species(body, genus_label, sub_indent)) do
             table.insert(target_grid.rows,
-                annotate_hierarchy(row, depth,
+                annotate_hierarchy(decorate_with_body_data(row, body), depth,
                     body_node_id .. "_g_" .. genus_label .. "_" .. (row["Species"] or "?"), ""))
         end
     end
@@ -257,13 +321,14 @@ local function emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
     local indented_name = hierarchy.indent_prefix(depth) .. raw_name
     local body_node_id = "body_" .. tostring(id)
     if not body or should_skip_body(body, settings) then
+        local placeholder = placeholder_ancestor_row(body, indented_name)
+        if body then placeholder = decorate_with_body_data(placeholder, body) end
         table.insert(target_grid.rows,
-            annotate_hierarchy(placeholder_ancestor_row(body, indented_name),
-                depth, body_node_id, raw_name))
+            annotate_hierarchy(placeholder, depth, body_node_id, raw_name))
         return
     end
     table.insert(target_grid.rows,
-        annotate_hierarchy(body_header_row(body, indented_name),
+        annotate_hierarchy(decorate_with_body_data(body_header_row(body, indented_name), body),
             depth, body_node_id, raw_name))
     emit_genus_children(target_grid, body, body_node_id, depth + 1)
 end

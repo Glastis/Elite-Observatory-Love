@@ -293,15 +293,16 @@ do
         event = "SAASignalsFound", SystemAddress = 11, BodyID = 2,
         BodyName = "Bio 1 a",
         Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
-        Genuses = {{ Genus_Localised = "Bacterium" }},
+        Genuses = {{ Genus_Localised = "Frutexa" }},
     }, settings)
 
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings, { group_by_body = true })
 
-    local bacterium_species_count = 13
-    eq(#target.rows, 3 + bacterium_species_count,
-        "hierarchical surfaces 2 ancestors + body header + one row per Bacterium species")
+    local bi_species = require("plugins.bioinsights.species_values")
+    local frutexa_species_count = #bi_species.species_in_genus("Frutexa")
+    eq(#target.rows, 3 + frutexa_species_count,
+        "hierarchical surfaces 2 ancestors + body header + one row per Frutexa species")
     eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
     truthy(target.rows[2]["Body"]:find("  > Bio 1", 1, true),
         "intermediate planet carries branch glyph at depth 1")
@@ -311,14 +312,14 @@ do
         "body header row carries no genus")
     truthy(target.rows[4]["_depth"] == 3,
         "genus child sits one level below the body header")
-    eq(target.rows[4]["Genus"], "Bacterium",
+    eq(target.rows[4]["Genus"], "Frutexa",
         "genus sub-row holds the bio data")
     eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.pending,
-        "predicted species default to pending status")
+        "predicted species default to pending status when no codex constraint applies")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, bacterium_species_count,
+    eq(#target.rows, frutexa_species_count,
         "flat rebuild emits one row per possible species in the bio body")
     eq(target.rows[1]["Body"], "Bio 1 a", "first row carries the bio body name")
 end
@@ -687,6 +688,110 @@ do
     eq(confirmed_species, "Bacterium Acies",
         "confirmed species matches ScanOrganic payload")
     truthy(excluded_rows >= 12, "all sibling species in the genus are excluded")
+end
+
+-- bioinsights: codex filters Bacterium by atmosphere -----------------------
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 800, StarSystem = "Codex",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 800, BodyID = 1,
+        BodyName = "Codex 1", PlanetClass = "Icy body",
+        AtmosphereType = "Argon", DistanceFromArrivalLS = 100,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 800, BodyID = 1,
+        BodyName = "Codex 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+
+    local pending_species = {}
+    for _, row in ipairs(target.rows) do
+        if row["Status"] == bi_constants.STATUS_LABEL.pending then
+            pending_species[row["Species"]] = true
+        end
+    end
+    truthy(pending_species["Bacterium Vesicula"],
+        "Argon atmosphere keeps Bacterium Vesicula pending")
+    truthy(not pending_species["Bacterium Aurasus"],
+        "Argon atmosphere excludes Bacterium Aurasus (CO2)")
+    truthy(not pending_species["Bacterium Acies"],
+        "Argon atmosphere excludes Bacterium Acies (Neon)")
+    truthy(not pending_species["Bacterium Tela"],
+        "Non-volcanic body excludes Bacterium Tela")
+end
+
+-- bioinsights: body value tightens as species are confirmed/excluded -------
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = 900, StarSystem = "Range",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 900, BodyID = 1,
+        BodyName = "Range 1", PlanetClass = "Icy body",
+        AtmosphereType = "Neon", DistanceFromArrivalLS = 100,
+    }, settings)
+    bi_handlers.dispatch({
+        event = "SAASignalsFound", SystemAddress = 900, BodyID = 1,
+        BodyName = "Range 1",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+        Genuses = {{ Genus_Localised = "Bacterium" }},
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+    local first_body_value = target.rows[1]["Body Value"]
+    truthy(first_body_value:find("cr"),
+        "body value column is populated before ScanOrganic")
+
+    bi_handlers.dispatch({
+        event = "ScanOrganic", SystemAddress = 900, Body = 1,
+        ScanType = "Analyse",
+        Species_Localised = "Bacterium Acies",
+        Variant_Localised = "Bacterium Acies - Cobalt",
+    }, settings)
+
+    target.rows = {}
+    bi_grid.rebuild(target, settings)
+    eq(target.rows[1]["Body Value"], "1.0M cr",
+        "body value collapses to single confirmed species value")
 end
 
 print(string.format("\n%d tests, %d failures", total, failures))

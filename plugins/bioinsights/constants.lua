@@ -1,12 +1,15 @@
 return {
     GRID_COLUMNS = {
-        "Body", "Type", "Genus", "Species", "Status",
+        "Body", "Type", "Star", "Bios", "Body Value",
+        "Genus", "Species", "Status",
         "Variant", "Samples", "Value", "Distance",
     },
 
     COLUMN_ALIGN = {
-        ["Distance"] = "right",
-        ["Value"]    = "right",
+        ["Distance"]   = "right",
+        ["Value"]      = "right",
+        ["Body Value"] = "right",
+        ["Bios"]       = "right",
     },
 
     STATUS_LABEL = {

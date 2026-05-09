@@ -56,14 +56,37 @@ local function on_location_like(entry)
     state.set_current_system(entry.SystemAddress, entry.StarSystem)
 end
 
+local function inherit_parent_star_type(system_address, body, parents)
+    if type(parents) ~= "table" then return end
+    for _, parent in ipairs(parents) do
+        for kind, body_id in pairs(parent) do
+            if kind == "Star" then
+                local star_body = state.ensure_body(system_address, body_id, nil)
+                if star_body and star_body.parent_star_type ~= "" then
+                    body.parent_star_type = star_body.parent_star_type
+                    return
+                end
+            end
+        end
+    end
+end
+
 local function on_scan(entry)
     ensure_parent_chain(entry.SystemAddress, entry.Parents)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
     if not body then return end
-    body.distance_ls    = entry.DistanceFromArrivalLS or body.distance_ls
-    body.body_type      = entry.PlanetClass or entry.StarType or body.body_type
-    body.parent_body_id = extract_parent_body_id(entry.Parents)
+    body.distance_ls      = entry.DistanceFromArrivalLS or body.distance_ls
+    body.body_type        = entry.PlanetClass or entry.StarType or body.body_type
+    body.atmosphere_type  = entry.AtmosphereType or body.atmosphere_type
+    body.atmosphere       = entry.Atmosphere or body.atmosphere
+    body.volcanism        = entry.Volcanism or body.volcanism
+    if entry.StarType then body.parent_star_type = entry.StarType end
+    if not entry.StarType then
+        inherit_parent_star_type(entry.SystemAddress, body, entry.Parents)
+    end
+    body.parent_body_id   = extract_parent_body_id(entry.Parents)
         or body.parent_body_id
+    state.refresh_genus_constraints(body)
 end
 
 local function on_fss_body_signals(entry)

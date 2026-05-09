@@ -1,4 +1,5 @@
 local species_values = require("plugins.bioinsights.species_values")
+local species_codex = require("plugins.bioinsights.species_codex")
 
 local state = {}
 
@@ -38,6 +39,10 @@ local function blank_body(body_name)
     return {
         name                = body_name or "?",
         body_type           = "",
+        atmosphere_type     = "",
+        atmosphere          = "",
+        volcanism           = "",
+        parent_star_type    = "",
         distance_ls         = 0,
         parent_body_id      = nil,
         biological_count    = 0,
@@ -75,13 +80,32 @@ function state.ensure_body(system_address, body_id, body_name)
     return system.bodies[body_id]
 end
 
+local function apply_codex_constraints(body, entry)
+    for species_label, status in pairs(entry.species_states) do
+        if status == SPECIES_STATUS.PENDING then
+            local match = species_codex.species_matches_body(species_label, body)
+            if match == false then
+                entry.species_states[species_label] = SPECIES_STATUS.EXCLUDED
+            end
+        end
+    end
+end
+
 function state.ensure_genus(body, genus_label)
     if not body or not genus_label then return nil end
     if not body.genus_entries[genus_label] then
         body.genus_entries[genus_label] = blank_genus_entry(genus_label)
         table.insert(body.genus_order, genus_label)
+        apply_codex_constraints(body, body.genus_entries[genus_label])
     end
     return body.genus_entries[genus_label]
+end
+
+function state.refresh_genus_constraints(body)
+    if not body then return end
+    for _, entry in pairs(body.genus_entries) do
+        apply_codex_constraints(body, entry)
+    end
 end
 
 function state.confirm_species(body, genus_label, species_label, variant_label, sample_index)
