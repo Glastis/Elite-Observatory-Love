@@ -30,6 +30,7 @@ local function blank_genus_entry(genus_label)
         variant_label    = nil,
         sample_index     = 0,
         confirmed_value  = nil,
+        dss_confirmed    = false,
         species_states   = build_initial_species_states(genus_label),
         species_order    = species_values.species_in_genus(genus_label),
     }
@@ -50,6 +51,7 @@ local function blank_body(body_name)
         parent_body_id      = nil,
         biological_count    = 0,
         geological_count    = 0,
+        materials           = {},
         genus_entries       = {},
         genus_order         = {},
     }
@@ -104,10 +106,71 @@ function state.ensure_genus(body, genus_label)
     return body.genus_entries[genus_label]
 end
 
+function state.mark_genus_dss_confirmed(body, genus_label)
+    local entry = state.ensure_genus(body, genus_label)
+    if entry then entry.dss_confirmed = true end
+    return entry
+end
+
+local function genus_is_authoritative(entry)
+    if not entry then return false end
+    return entry.dss_confirmed or entry.species_label ~= nil
+end
+
+local function remove_genus(body, genus_label)
+    body.genus_entries[genus_label] = nil
+    for index, label in ipairs(body.genus_order) do
+        if label == genus_label then
+            table.remove(body.genus_order, index)
+            return
+        end
+    end
+end
+
+function state.prune_candidate_genuses(body)
+    if not body then return end
+    local stale = {}
+    for genus_label, entry in pairs(body.genus_entries) do
+        if not genus_is_authoritative(entry) then
+            table.insert(stale, genus_label)
+        end
+    end
+    for _, label in ipairs(stale) do remove_genus(body, label) end
+end
+
 function state.refresh_genus_constraints(body)
     if not body then return end
     for _, entry in pairs(body.genus_entries) do
         apply_codex_constraints(body, entry)
+    end
+end
+
+local function genus_has_possible_species(body, genus_label)
+    for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
+        if species_codex.species_matches_body(species_label, body) ~= false then
+            return true
+        end
+    end
+    return false
+end
+
+local function body_has_dss_data(body)
+    for _, entry in pairs(body.genus_entries) do
+        if entry.dss_confirmed then return true end
+    end
+    return false
+end
+
+function state.populate_candidate_genuses(body)
+    if not body then return end
+    if body.biological_count <= 0 then return end
+    if not body.body_type or body.body_type == "" then return end
+    if body_has_dss_data(body) then return end
+    for _, genus_label in ipairs(species_codex.all_genuses()) do
+        if not body.genus_entries[genus_label]
+            and genus_has_possible_species(body, genus_label) then
+            state.ensure_genus(body, genus_label)
+        end
     end
 end
 

@@ -1,6 +1,7 @@
 local constants = require("plugins.bioinsights.constants")
 local state = require("plugins.bioinsights.state")
 local species_values = require("plugins.bioinsights.species_values")
+local variants = require("plugins.bioinsights.variants")
 local hierarchy = require("observatory.grid_hierarchy")
 
 local grid = {}
@@ -125,6 +126,24 @@ local function decorate_with_body_data(row, body)
     return row
 end
 
+local function variant_for_pending(species_label, body)
+    return variants.predict_for(species_label, body) or constants.UNKNOWN_TEXT
+end
+
+local function variant_for_row(body, entry, species_label, status)
+    if status == "confirmed" then
+        return entry.variant_label or constants.UNKNOWN_TEXT
+    end
+    return variant_for_pending(species_label, body)
+end
+
+local function display_status(entry, status)
+    if status == "pending" and entry and entry.dss_confirmed then
+        return constants.STATUS_LABEL.predicted
+    end
+    return constants.STATUS_LABEL[status] or status
+end
+
 local function species_row_for_status(body, genus_label, species_label, status, body_label)
     local entry = body.genus_entries[genus_label]
     local is_confirmed = (status == "confirmed")
@@ -133,8 +152,8 @@ local function species_row_for_status(body, genus_label, species_label, status, 
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = genus_label,
         ["Species"]  = species_label,
-        ["Status"]   = constants.STATUS_LABEL[status] or status,
-        ["Variant"]  = is_confirmed and (entry.variant_label or constants.UNKNOWN_TEXT) or constants.UNKNOWN_TEXT,
+        ["Status"]   = display_status(entry, status),
+        ["Variant"]  = variant_for_row(body, entry, species_label, status),
         ["Samples"]  = is_confirmed and (constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?") or constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = format_value_for_species(species_label),
         ["Distance"] = format_distance(body.distance_ls),
@@ -143,13 +162,17 @@ end
 
 local function row_for_genus(body, genus_label, body_label)
     local entry = body.genus_entries[genus_label]
+    local variant_label = entry.variant_label
+    if not variant_label and entry.species_label then
+        variant_label = variants.predict_for(entry.species_label, body)
+    end
     return {
         ["Body"]     = body_label,
         ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
         ["Genus"]    = genus_label,
         ["Species"]  = entry.species_label or constants.UNKNOWN_TEXT,
         ["Status"]   = entry.species_label and constants.STATUS_LABEL.confirmed or constants.STATUS_LABEL.pending,
-        ["Variant"]  = entry.variant_label or constants.UNKNOWN_TEXT,
+        ["Variant"]  = variant_label or constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?",
         ["Value"]    = format_value_for_genus(entry, genus_label),
         ["Distance"] = format_distance(body.distance_ls),
@@ -240,6 +263,11 @@ local function bodies_with_biology(bodies)
     return list
 end
 
+local function should_hide_pending_species(status, species_label, body)
+    if status ~= "pending" then return false end
+    return variants.predict_for(species_label, body) == nil
+end
+
 local function rows_for_genus_species(body, genus_label, body_label)
     local entry = body.genus_entries[genus_label]
     if not entry or #entry.species_order == 0 then
@@ -249,7 +277,8 @@ local function rows_for_genus_species(body, genus_label, body_label)
     local emitted_first = false
     for _, species_label in ipairs(entry.species_order) do
         local status = entry.species_states[species_label] or "pending"
-        if status ~= "excluded" then
+        if status ~= "excluded"
+            and not should_hide_pending_species(status, species_label, body) then
             local label = (not emitted_first) and body_label or ""
             table.insert(rows, species_row_for_status(body, genus_label, species_label, status, label))
             emitted_first = true

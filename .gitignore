@@ -1,5 +1,7 @@
 /.claude/
 /.idea/
 /not_versionable/
+/elite_journal/
 *.log
 core.*
+tmp.png

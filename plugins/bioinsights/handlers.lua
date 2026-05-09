@@ -25,7 +25,7 @@ end
 local function register_genuses(body, genuses)
     for _, genus in ipairs(genuses or {}) do
         local label = genus.Genus_Localised or genus.Genus
-        if label then state.ensure_genus(body, label) end
+        if label then state.mark_genus_dss_confirmed(body, label) end
     end
 end
 
@@ -71,6 +71,17 @@ local function inherit_parent_star_type(system_address, body, parents)
     end
 end
 
+local function collect_materials(material_list)
+    local result = {}
+    for _, mat in ipairs(material_list or {}) do
+        local raw = mat.Name or mat.name
+        if raw and raw ~= "" then
+            table.insert(result, string.lower(raw))
+        end
+    end
+    return result
+end
+
 local function on_scan(entry)
     ensure_parent_chain(entry.SystemAddress, entry.Parents)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
@@ -83,6 +94,7 @@ local function on_scan(entry)
     body.gravity_ms2      = entry.SurfaceGravity or body.gravity_ms2
     body.temperature_k    = entry.SurfaceTemperature or body.temperature_k
     body.pressure_pa      = entry.SurfacePressure or body.pressure_pa
+    if entry.Materials then body.materials = collect_materials(entry.Materials) end
     if entry.StarType then body.parent_star_type = entry.StarType end
     if not entry.StarType then
         inherit_parent_star_type(entry.SystemAddress, body, entry.Parents)
@@ -90,12 +102,14 @@ local function on_scan(entry)
     body.parent_body_id   = extract_parent_body_id(entry.Parents)
         or body.parent_body_id
     state.refresh_genus_constraints(body)
+    state.populate_candidate_genuses(body)
 end
 
 local function on_fss_body_signals(entry)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
     if not body then return end
     update_signals(body, entry.Signals)
+    state.populate_candidate_genuses(body)
 end
 
 local function notify_high_value_genus(body, genus_label, settings)
@@ -115,6 +129,7 @@ local function on_saa_signals_found(entry, settings)
     if not body then return end
     update_signals(body, entry.Signals)
     register_genuses(body, entry.Genuses)
+    state.prune_candidate_genuses(body)
     for _, genus in ipairs(entry.Genuses or {}) do
         local label = genus.Genus_Localised or genus.Genus
         if label then notify_high_value_genus(body, label, settings) end

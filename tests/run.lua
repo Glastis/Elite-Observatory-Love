@@ -316,8 +316,8 @@ do
         "genus child sits one level below the body header")
     eq(target.rows[4]["Genus"], "Frutexa",
         "genus sub-row holds the bio data")
-    eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.pending,
-        "first surfaced Frutexa species is pending (excluded ones are hidden)")
+    eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.predicted,
+        "first surfaced Frutexa species is predicted (DSS-mapped, excluded ones hidden)")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)
@@ -496,12 +496,18 @@ do
         event = "FSDJump", SystemAddress = 100, StarSystem = "Alpha",
     }, settings)
     bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 100, BodyID = 0,
+        BodyName = "Alpha", StarType = "G", DistanceFromArrivalLS = 0,
+        Parents = {},
+    }, settings)
+    bi_handlers.dispatch({
         event = "Scan", SystemAddress = 100, BodyID = 1,
         BodyName = "Alpha 1", PlanetClass = "Rocky body",
         AtmosphereType = "Ammonia",
         SurfaceGravity = 1.5, SurfaceTemperature = 165.0,
         SurfacePressure = 1000.0,
         DistanceFromArrivalLS = 100,
+        Parents = {{ Star = 0 }},
     }, settings)
     bi_handlers.dispatch({
         event = "SAASignalsFound", SystemAddress = 100, BodyID = 1,
@@ -514,12 +520,18 @@ do
         event = "FSDJump", SystemAddress = 200, StarSystem = "Beta",
     }, settings)
     bi_handlers.dispatch({
+        event = "Scan", SystemAddress = 200, BodyID = 0,
+        BodyName = "Beta", StarType = "G", DistanceFromArrivalLS = 0,
+        Parents = {},
+    }, settings)
+    bi_handlers.dispatch({
         event = "Scan", SystemAddress = 200, BodyID = 1,
         BodyName = "Beta 1", PlanetClass = "Rocky body",
         AtmosphereType = "Ammonia",
         SurfaceGravity = 1.5, SurfaceTemperature = 165.0,
         SurfacePressure = 1000.0,
         DistanceFromArrivalLS = 100,
+        Parents = {{ Star = 0 }},
     }, settings)
     bi_handlers.dispatch({
         event = "SAASignalsFound", SystemAddress = 200, BodyID = 1,
@@ -732,19 +744,21 @@ do
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
 
-    local pending_species = {}
+    local visible_species = {}
     for _, row in ipairs(target.rows) do
-        if row["Status"] == bi_constants.STATUS_LABEL.pending then
-            pending_species[row["Species"]] = true
+        local s = row["Status"]
+        if s == bi_constants.STATUS_LABEL.pending
+            or s == bi_constants.STATUS_LABEL.predicted then
+            visible_species[row["Species"]] = true
         end
     end
-    truthy(pending_species["Bacterium Vesicula"],
-        "Argon atmosphere keeps Bacterium Vesicula pending")
-    truthy(not pending_species["Bacterium Aurasus"],
+    truthy(visible_species["Bacterium Vesicula"],
+        "Argon atmosphere keeps Bacterium Vesicula predicted")
+    truthy(not visible_species["Bacterium Aurasus"],
         "Argon atmosphere excludes Bacterium Aurasus (CO2)")
-    truthy(not pending_species["Bacterium Acies"],
+    truthy(not visible_species["Bacterium Acies"],
         "Argon atmosphere excludes Bacterium Acies (Neon)")
-    truthy(not pending_species["Bacterium Tela"],
+    truthy(not visible_species["Bacterium Tela"],
         "Non-volcanic body excludes Bacterium Tela")
 end
 
@@ -833,6 +847,15 @@ do
         }, settings)
     end
 
+    local function build_materials(names)
+        if not names then return nil end
+        local result = {}
+        for _, name in ipairs(names) do
+            table.insert(result, { Name = name, Percent = 1.0 })
+        end
+        return result
+    end
+
     local function scan_body(opts)
         bi_handlers.dispatch({
             event = "Scan", SystemAddress = opts.system, BodyID = opts.id,
@@ -843,6 +866,7 @@ do
             SurfacePressure = opts.pressure_pa or 0,
             Volcanism = opts.volcanism or "",
             DistanceFromArrivalLS = opts.distance_ls or 0,
+            Materials = build_materials(opts.materials),
             Parents = opts.parents or {{ Star = 0 }},
         }, settings)
     end
@@ -938,6 +962,7 @@ do
         planet_class = "Icy body", atmosphere = "Argon",
         gravity_ms2 = 2.0, temperature_k = 65.0, pressure_pa = 600.0,
         volcanism = "minor nitrogen magma volcanism",
+        materials = { "mercury", "tungsten", "technetium" },
         distance_ls = 500.0,
     })
     saa({ system = SYS_QA_S_b22_1, id = 9,
@@ -968,7 +993,7 @@ do
             { species = "Bacterium Acies",       status = "confirmed", variant = "Bacterium Acies - Lime" },
         },
         ["Prua Dryoae QA-S b22-1 7 b"] = {
-            { species = "Bacterium Aurasus",     status = "pending",   variant = "Teal" },
+            { species = "Bacterium Aurasus",     status = "predicted", variant = "Teal" },
             { species = "Frutexa Acus",          status = "confirmed", variant = "Frutexa Acus - Grey" },
             { species = "Stratum Paleas",        status = "confirmed", variant = "Stratum Paleas - Green" },
         },
@@ -976,11 +1001,11 @@ do
             { species = "Fonticulua Upupam",     status = "confirmed", variant = "Fonticulua Upupam - Amethyst" },
         },
         ["Prua Dryoae QA-S b22-1 9 d"] = {
-            { species = "Bacterium Omentum",     status = "pending",   variant = "White or Blue" },
-            { species = "Bacterium Tela",        status = "pending",   variant = "Orange or Green" },
-            { species = "Bacterium Vesicula",    status = "pending",   variant = "Gold" },
-            { species = "Fonticulua Campestris", status = "pending",   variant = "Amethyst" },
-            { species = "Fumerola Nitris",       status = "pending",   variant = "Peach or Aquamarine" },
+            { species = "Bacterium Omentum",     status = "predicted", variant = "White or Blue" },
+            { species = "Bacterium Tela",        status = "predicted", variant = "Orange or Green" },
+            { species = "Bacterium Vesicula",    status = "predicted", variant = "Gold" },
+            { species = "Fonticulua Campestris", status = "predicted", variant = "Amethyst" },
+            { species = "Fumerola Nitris",       status = "predicted", variant = "Peach or Aquamarine" },
         },
     }
 
@@ -1007,5 +1032,67 @@ do
     end
 end
 
+-- bioinsights: FSS-only body (no SAA) still enumerates candidate species ----
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_grid = require("plugins.bioinsights.grid")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value = false, notify_on_new_codex = false,
+        minimum_high_value = 0, only_show_high_value = false,
+    }
+
+    local SYS = 9001
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = SYS, StarSystem = "Test System",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 1,
+        BodyName = "Test Body 1", StarType = "M",
+        DistanceFromArrivalLS = 0, Parents = {},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 9,
+        BodyName = "Test Body 1 9 d", PlanetClass = "Icy body",
+        AtmosphereType = "Argon",
+        SurfaceGravity = 0.96, SurfaceTemperature = 57.0, SurfacePressure = 463.0,
+        Volcanism = "minor nitrogen magma volcanism",
+        DistanceFromArrivalLS = 1611.0,
+        Materials = { { Name = "mercury", Percent = 0.5 },
+                      { Name = "tungsten", Percent = 0.7 },
+                      { Name = "technetium", Percent = 0.4 } },
+        Parents = {{ Star = 1 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "FSSBodySignals", SystemAddress = SYS, BodyID = 9,
+        BodyName = "Test Body 1 9 d",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 3 }},
+    }, settings)
+
+    local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
+    bi_grid.rebuild(target, settings)
+
+    local species_seen = {}
+    for _, row in ipairs(target.rows) do
+        species_seen[row["Species"]] = row["Variant"]
+    end
+
+    truthy(species_seen["Bacterium Vesicula"],
+        "FSS-only body should enumerate Bacterium Vesicula")
+    truthy(species_seen["Fonticulua Campestris"],
+        "FSS-only body should enumerate Fonticulua Campestris")
+    truthy(species_seen["Fumerola Nitris"],
+        "FSS-only body should enumerate Fumerola Nitris")
+    eq(species_seen["Bacterium Vesicula"], "Gold",
+        "FSS-only body still gets material-based variant prediction")
+end
+
 print(string.format("\n%d tests, %d failures", total, failures))
 os.exit(failures == 0 and 0 or 1)
+

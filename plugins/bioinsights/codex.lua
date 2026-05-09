@@ -57,6 +57,15 @@ function codex.species_in_genus(genus_label)
     return species_order_by_genus[genus_label] or {}
 end
 
+function codex.all_genuses()
+    local list = {}
+    for genus_label in pairs(species_order_by_genus) do
+        table.insert(list, genus_label)
+    end
+    table.sort(list)
+    return list
+end
+
 function codex.value_for_species(species_label)
     local entry = species_by_name[species_label]
     return entry and entry.value or nil

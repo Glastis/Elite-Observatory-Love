@@ -14,6 +14,7 @@ return {
 
     STATUS_LABEL = {
         pending   = "pending",
+        predicted = "predicted",
         confirmed = "confirmed",
         excluded  = "excluded",
     },
