@@ -67,8 +67,13 @@ function Plugin:set_near_guardian(is_enabled)
     apply_user_context_change()
 end
 
+function Plugin:set_system_hidden(is_enabled)
+    self.is_system_hidden = is_enabled and true or false
+end
+
 function Plugin:draw_view(view_state, x, y, w, h)
-    return card_view.draw(view_state, x, y, w, h, self.settings)
+    return card_view.draw(view_state, x, y, w, h, self.settings,
+        self.is_system_hidden)
 end
 
 function Plugin:row_count_label()

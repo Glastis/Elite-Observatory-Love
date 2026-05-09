@@ -296,11 +296,29 @@ local function build_genus_block(body, genus_label)
     }
 end
 
-local function display_body_name(body)
+local function strip_system_prefix(body_name, system_name)
+    if not system_name or system_name == "" then return body_name end
+    if body_name:sub(1, #system_name) ~= system_name then return body_name end
+    local last_word = system_name:match("(%S+)%s*$")
+    if not last_word then return body_name end
+    local keep_from = #system_name - #last_word + 1
+    local rest = body_name:sub(keep_from)
+    if rest == "" then return body_name end
+    return rest
+end
+
+local function raw_body_name(body)
     if body.name and body.name ~= "" and body.name ~= "?" then
         return body.name
     end
-    return constants.UNNAMED_BODY_PLACEHOLDER
+    return nil
+end
+
+local function display_body_name(body, system_name, hide_system)
+    local name = raw_body_name(body)
+    if not name then return constants.UNNAMED_BODY_PLACEHOLDER end
+    if not hide_system then return name end
+    return strip_system_prefix(name, system_name)
 end
 
 local function star_label(body)
@@ -323,11 +341,11 @@ local function bios_label(body)
     return string.format("%d bio%s", count, plural)
 end
 
-local function build_card(body, system_name)
+local function build_card(body, system_name, hide_system)
     local card = {
         body           = body,
         system_name    = system_name,
-        title          = display_body_name(body),
+        title          = display_body_name(body, system_name, hide_system),
         body_type      = body_type_label(body),
         star           = star_label(body),
         distance       = format_distance(body.distance_ls),
@@ -346,12 +364,12 @@ local function build_card(body, system_name)
     return card
 end
 
-local function build_cards(settings)
+local function build_cards(settings, hide_system)
     local list = {}
     for _, item in ipairs(plugin_state.systems_sorted()) do
         for _, body in pairs(item.system.bodies) do
             if not should_skip_body(body, settings) then
-                table.insert(list, build_card(body, item.system.name))
+                table.insert(list, build_card(body, item.system.name, hide_system))
             end
         end
     end
@@ -402,11 +420,7 @@ local function draw_card_title(card, x, y, w)
 end
 
 local function build_subheader_parts(card)
-    local parts = { card.body_type, card.star, card.distance, card.bios }
-    if card.system_name and card.system_name ~= "" and card.system_name ~= "?" then
-        table.insert(parts, 1, card.system_name)
-    end
-    return parts
+    return { card.body_type, card.star, card.distance, card.bios }
 end
 
 local function draw_card_subheader(card, x, y, w)
@@ -647,11 +661,11 @@ function CARD_VIEW.card_count(settings)
     return count
 end
 
-function CARD_VIEW.draw(view_state, x, y, w, h, settings)
+function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system)
     view_state = view_state or {}
     view_state.scroll = view_state.scroll or 0
     handle_wheel(view_state, x, y, w, h)
-    local cards = build_cards(settings)
+    local cards = build_cards(settings, hide_system)
     if #cards == 0 then
         draw_empty_state(x, y, w, h)
         return view_state

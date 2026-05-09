@@ -496,7 +496,21 @@ local function reset_grid_scroll(plugin_id)
     gs.scroll = 0
 end
 
+local SYSTEM_TOGGLE_LABEL = {
+    [true]  = "SHOW SYSTEM",
+    [false] = "HIDE SYSTEM",
+}
+
+local function system_toggle_label(plugin)
+    return SYSTEM_TOGGLE_LABEL[plugin.is_system_hidden == true]
+end
+
 local TOOLBAR_BUTTON_BUILDERS = {
+    {
+        label    = system_toggle_label,
+        setter   = "set_system_hidden",
+        flag     = "is_system_hidden",
+    },
     {
         label    = "GROUP BY BODY",
         setter   = "set_grouping",
@@ -514,10 +528,15 @@ local TOOLBAR_BUTTON_BUILDERS = {
     },
 }
 
+local function resolve_toolbar_label(label, plugin)
+    if type(label) == "function" then return label(plugin) end
+    return label
+end
+
 local function build_toolbar_item(plugin, definition)
     if not plugin[definition.setter] then return nil end
     return {
-        label = definition.label,
+        label = resolve_toolbar_label(definition.label, plugin),
         primary = plugin[definition.flag] == true,
         on_click = function()
             plugin[definition.setter](plugin, not plugin[definition.flag])
