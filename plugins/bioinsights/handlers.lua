@@ -80,6 +80,9 @@ local function on_scan(entry)
     body.atmosphere_type  = entry.AtmosphereType or body.atmosphere_type
     body.atmosphere       = entry.Atmosphere or body.atmosphere
     body.volcanism        = entry.Volcanism or body.volcanism
+    body.gravity_ms2      = entry.SurfaceGravity or body.gravity_ms2
+    body.temperature_k    = entry.SurfaceTemperature or body.temperature_k
+    body.pressure_pa      = entry.SurfacePressure or body.pressure_pa
     if entry.StarType then body.parent_star_type = entry.StarType end
     if not entry.StarType then
         inherit_parent_star_type(entry.SystemAddress, body, entry.Parents)

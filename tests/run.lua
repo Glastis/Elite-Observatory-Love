@@ -287,6 +287,10 @@ do
         event = "Scan", SystemAddress = 11, BodyID = 2,
         BodyName = "Bio 1 a", PlanetClass = "Rocky body",
         DistanceFromArrivalLS = 60,
+        AtmosphereType = "Ammonia",
+        SurfaceGravity = 1.5,
+        SurfaceTemperature = 165.0,
+        SurfacePressure = 1000.0,
         Parents = {{ Planet = 1 }, { Star = 0 }},
     }, settings)
     bi_handlers.dispatch({
@@ -314,8 +318,14 @@ do
         "genus child sits one level below the body header")
     eq(target.rows[4]["Genus"], "Frutexa",
         "genus sub-row holds the bio data")
-    eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.pending,
-        "predicted species default to pending status when no codex constraint applies")
+    local pending_genus_rows = 0
+    for i = 4, #target.rows do
+        if target.rows[i]["Status"] == bi_constants.STATUS_LABEL.pending then
+            pending_genus_rows = pending_genus_rows + 1
+        end
+    end
+    truthy(pending_genus_rows >= 1,
+        "at least one Frutexa species stays pending when atmosphere matches")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)

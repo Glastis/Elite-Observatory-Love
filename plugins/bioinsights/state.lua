@@ -1,5 +1,5 @@
 local species_values = require("plugins.bioinsights.species_values")
-local species_codex = require("plugins.bioinsights.species_codex")
+local species_codex = require("plugins.bioinsights.codex")
 
 local state = {}
 
@@ -44,6 +44,9 @@ local function blank_body(body_name)
         volcanism           = "",
         parent_star_type    = "",
         distance_ls         = 0,
+        gravity_ms2         = 0,
+        temperature_k       = 0,
+        pressure_pa         = 0,
         parent_body_id      = nil,
         biological_count    = 0,
         geological_count    = 0,
