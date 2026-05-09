@@ -71,6 +71,7 @@ local function blank_body(body_name)
         materials           = {},
         genus_entries       = {},
         genus_order         = {},
+        system_address      = nil,
     }
 end
 
@@ -99,14 +100,29 @@ function state.ensure_body(system_address, body_id, body_name)
     end
     system.bodies[body_id] = system.bodies[body_id] or blank_body(body_name)
     if body_name then system.bodies[body_id].name = body_name end
+    system.bodies[body_id].system_address = system_address
     return system.bodies[body_id]
+end
+
+local function system_for_body(body)
+    if not body or not body.system_address then return nil end
+    return data.systems[body.system_address]
+end
+
+local function build_eval_context(body)
+    return {
+        near_nebula   = user_context.near_nebula,
+        near_guardian = user_context.near_guardian,
+        system        = system_for_body(body),
+    }
 end
 
 local function apply_codex_constraints(body, entry)
     if entry.species_label then return end
+    local eval_context = build_eval_context(body)
     for species_label, status in pairs(entry.species_states) do
         if status ~= SPECIES_STATUS.CONFIRMED then
-            local match = species_codex.species_matches_body(species_label, body, user_context)
+            local match = species_codex.species_matches_body(species_label, body, eval_context)
             if match == false then
                 entry.species_states[species_label] = SPECIES_STATUS.EXCLUDED
             else
@@ -166,8 +182,9 @@ function state.refresh_genus_constraints(body)
 end
 
 local function genus_has_possible_species(body, genus_label)
+    local eval_context = build_eval_context(body)
     for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
-        if species_codex.species_matches_body(species_label, body, user_context) ~= false then
+        if species_codex.species_matches_body(species_label, body, eval_context) ~= false then
             return true
         end
     end

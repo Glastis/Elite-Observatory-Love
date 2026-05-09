@@ -181,6 +181,36 @@ local function check_user_flag(context, key)
     return false
 end
 
+local function check_min_distance(rule, body)
+    if not body.distance_ls or body.distance_ls <= 0 then return nil end
+    if body.distance_ls < rule then return false end
+    return true
+end
+
+local function context_system(context)
+    return context and context.system or nil
+end
+
+local function any_body_type_matches(system, candidates)
+    if not system or not system.bodies then return nil end
+    for _, sibling in pairs(system.bodies) do
+        local sibling_type = sibling.body_type
+        if sibling_type and sibling_type ~= ""
+            and value_in_list(sibling_type, candidates) then
+            return true
+        end
+    end
+    return nil
+end
+
+local function check_system_body_match(rule, context)
+    return any_body_type_matches(context_system(context), rule)
+end
+
+local function check_indeterminate()
+    return nil
+end
+
 local CONSTRAINT_CHECKERS = {
     atmosphere      = function(rule, body, _) return check_atmosphere(rule, body) end,
     body_type       = function(rule, body, _) return check_body_type(rule, body) end,
@@ -194,6 +224,11 @@ local CONSTRAINT_CHECKERS = {
     volcanism       = function(rule, body, _) return check_volcanism(rule, body) end,
     nebula          = function(_, _, context) return check_user_flag(context, "near_nebula") end,
     guardian        = function(_, _, context) return check_user_flag(context, "near_guardian") end,
+    distance        = function(rule, body, _) return check_min_distance(rule, body) end,
+    star            = function(rule, _, context) return check_system_body_match(rule, context) end,
+    bodies          = function(rule, _, context) return check_system_body_match(rule, context) end,
+    regions         = check_indeterminate,
+    region          = check_indeterminate,
 }
 
 local function ruleset_matches(ruleset, body, context)

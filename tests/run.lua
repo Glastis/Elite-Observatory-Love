@@ -800,6 +800,76 @@ do
         "Non-volcanic body excludes Bacterium Tela")
 end
 
+-- bioinsights: codex enforces Crystalline Shards distance/star/bodies rules --
+do
+    local bi_state = require("plugins.bioinsights.state")
+    local bi_handlers = require("plugins.bioinsights.handlers")
+    local bi_constants = require("plugins.bioinsights.constants")
+
+    bi_state.reset()
+    bi_handlers.set_notifier(function(_) end)
+    bi_handlers.set_on_change(function() end)
+
+    local settings = {
+        notify_on_high_value   = false,
+        notify_on_new_codex    = false,
+        minimum_high_value     = 0,
+        only_show_high_value   = false,
+    }
+
+    local SYS = 1234
+    bi_handlers.dispatch({
+        event = "FSDJump", SystemAddress = SYS, StarSystem = "Shards Test",
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 0,
+        BodyName = "Shards Test A", StarType = "A",
+        DistanceFromArrivalLS = 0, Parents = {},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 5,
+        BodyName = "Shards Test 5", PlanetClass = "Earthlike body",
+        AtmosphereType = "", DistanceFromArrivalLS = 800,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 9,
+        BodyName = "Shards Test 9", PlanetClass = "Icy body",
+        AtmosphereType = "Argon", SurfaceGravity = 0.95,
+        SurfaceTemperature = 50.0, DistanceFromArrivalLS = 1500,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "FSSBodySignals", SystemAddress = SYS, BodyID = 9,
+        BodyName = "Shards Test 9",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+    }, settings)
+
+    bi_handlers.dispatch({
+        event = "Scan", SystemAddress = SYS, BodyID = 12,
+        BodyName = "Shards Test 12", PlanetClass = "Icy body",
+        AtmosphereType = "Argon", SurfaceGravity = 0.95,
+        SurfaceTemperature = 50.0, DistanceFromArrivalLS = 14000,
+        Parents = {{ Star = 0 }},
+    }, settings)
+    bi_handlers.dispatch({
+        event = "FSSBodySignals", SystemAddress = SYS, BodyID = 12,
+        BodyName = "Shards Test 12",
+        Signals = {{ Type = bi_constants.SIGNAL_KEY_BIOLOGICAL, Count = 1 }},
+    }, settings)
+
+    local close_body = bi_state.bodies_in_current_system()[9]
+    local far_body   = bi_state.bodies_in_current_system()[12]
+
+    truthy(close_body and not close_body.genus_entries["Crystalline"],
+        "Crystalline genus is dropped on body inside 12000 Ls")
+
+    local far_entry = far_body and far_body.genus_entries["Crystalline"]
+    truthy(far_entry and far_entry.species_states["Crystalline Shards"]
+        ~= bi_state.SPECIES_STATUS.EXCLUDED,
+        "Crystalline Shards stays predicted on body beyond 12000 Ls in qualifying system")
+end
+
 -- bioinsights: body value tightens as species are confirmed/excluded -------
 do
     local bi_state = require("plugins.bioinsights.state")
