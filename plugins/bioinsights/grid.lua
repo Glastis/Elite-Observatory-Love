@@ -246,10 +246,14 @@ local function rows_for_genus_species(body, genus_label, body_label)
         return { row_for_genus(body, genus_label, body_label) }
     end
     local rows = {}
-    for i, species_label in ipairs(entry.species_order) do
-        local label = (i == 1) and body_label or ""
+    local emitted_first = false
+    for _, species_label in ipairs(entry.species_order) do
         local status = entry.species_states[species_label] or "pending"
-        table.insert(rows, species_row_for_status(body, genus_label, species_label, status, label))
+        if status ~= "excluded" then
+            local label = (not emitted_first) and body_label or ""
+            table.insert(rows, species_row_for_status(body, genus_label, species_label, status, label))
+            emitted_first = true
+        end
     end
     return rows
 end

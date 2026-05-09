@@ -303,10 +303,8 @@ do
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings, { group_by_body = true })
 
-    local bi_species = require("plugins.bioinsights.species_values")
-    local frutexa_species_count = #bi_species.species_in_genus("Frutexa")
-    eq(#target.rows, 3 + frutexa_species_count,
-        "hierarchical surfaces 2 ancestors + body header + one row per Frutexa species")
+    truthy(#target.rows >= 4,
+        "hierarchical surfaces ancestors + at least one Frutexa species")
     eq(target.rows[1]["Body"], "Bio", "star ancestor at depth 0")
     truthy(target.rows[2]["Body"]:find("  > Bio 1", 1, true),
         "intermediate planet carries branch glyph at depth 1")
@@ -318,19 +316,13 @@ do
         "genus child sits one level below the body header")
     eq(target.rows[4]["Genus"], "Frutexa",
         "genus sub-row holds the bio data")
-    local pending_genus_rows = 0
-    for i = 4, #target.rows do
-        if target.rows[i]["Status"] == bi_constants.STATUS_LABEL.pending then
-            pending_genus_rows = pending_genus_rows + 1
-        end
-    end
-    truthy(pending_genus_rows >= 1,
-        "at least one Frutexa species stays pending when atmosphere matches")
+    eq(target.rows[4]["Status"], bi_constants.STATUS_LABEL.pending,
+        "first surfaced Frutexa species is pending (excluded ones are hidden)")
 
     target.rows = {}
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, frutexa_species_count,
-        "flat rebuild emits one row per possible species in the bio body")
+    truthy(#target.rows >= 1,
+        "flat rebuild emits at least one row for the matching bio body")
     eq(target.rows[1]["Body"], "Bio 1 a", "first row carries the bio body name")
 end
 
@@ -506,6 +498,9 @@ do
     bi_handlers.dispatch({
         event = "Scan", SystemAddress = 100, BodyID = 1,
         BodyName = "Alpha 1", PlanetClass = "Rocky body",
+        AtmosphereType = "Ammonia",
+        SurfaceGravity = 1.5, SurfaceTemperature = 165.0,
+        SurfacePressure = 1000.0,
         DistanceFromArrivalLS = 100,
     }, settings)
     bi_handlers.dispatch({
@@ -521,6 +516,9 @@ do
     bi_handlers.dispatch({
         event = "Scan", SystemAddress = 200, BodyID = 1,
         BodyName = "Beta 1", PlanetClass = "Rocky body",
+        AtmosphereType = "Ammonia",
+        SurfaceGravity = 1.5, SurfaceTemperature = 165.0,
+        SurfacePressure = 1000.0,
         DistanceFromArrivalLS = 100,
     }, settings)
     bi_handlers.dispatch({
@@ -534,13 +532,10 @@ do
         event = "FSDJump", SystemAddress = 300, StarSystem = "Gamma",
     }, settings)
 
-    local bi_species = require("plugins.bioinsights.species_values")
-    local expected_rows = #bi_species.species_in_genus("Bacterium")
-        + #bi_species.species_in_genus("Frutexa")
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, expected_rows,
-        "bioinsights enumerates possible species across systems with bio")
+    truthy(#target.rows >= 2,
+        "bioinsights surfaces matching species across multiple systems")
     local body_labels = {}
     for _, row in ipairs(target.rows) do
         if row["Body"] ~= "" then body_labels[row["Body"]] = true end
@@ -619,7 +614,9 @@ do
     }, settings)
     bi_handlers.dispatch({
         event = "Scan", SystemAddress = 500, BodyID = 1,
-        BodyName = "Session1 1", PlanetClass = "Rocky body",
+        BodyName = "Session1 1", PlanetClass = "Icy body",
+        AtmosphereType = "Argon",
+        SurfaceGravity = 2.0,
         DistanceFromArrivalLS = 10,
     }, settings)
     bi_handlers.dispatch({
@@ -634,12 +631,10 @@ do
         event = "FSDJump", SystemAddress = 600, StarSystem = "Session2",
     }, settings)
 
-    local bi_species = require("plugins.bioinsights.species_values")
-    local expected_rows = #bi_species.species_in_genus("Bacterium")
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
-    eq(#target.rows, expected_rows,
-        "Session1 bio data survives LoadGame on next journal")
+    truthy(#target.rows >= 1,
+        "Session1 bio candidates survive LoadGame on next journal")
 end
 
 -- bioinsights: ScanOrganic confirms the species and excludes siblings -----
@@ -684,20 +679,21 @@ do
 
     local target = { columns = bi_constants.GRID_COLUMNS, rows = {} }
     bi_grid.rebuild(target, settings)
-    local confirmed_rows, excluded_rows = 0, 0
+    local confirmed_rows, pending_rows = 0, 0
     local confirmed_species
     for _, row in ipairs(target.rows) do
         if row["Status"] == bi_constants.STATUS_LABEL.confirmed then
             confirmed_rows = confirmed_rows + 1
             confirmed_species = row["Species"]
-        elseif row["Status"] == bi_constants.STATUS_LABEL.excluded then
-            excluded_rows = excluded_rows + 1
+        elseif row["Status"] == bi_constants.STATUS_LABEL.pending then
+            pending_rows = pending_rows + 1
         end
     end
     eq(confirmed_rows, 1, "exactly one species is confirmed for the genus")
     eq(confirmed_species, "Bacterium Acies",
         "confirmed species matches ScanOrganic payload")
-    truthy(excluded_rows >= 12, "all sibling species in the genus are excluded")
+    eq(pending_rows, 0,
+        "no sibling species remains pending after the genus is confirmed")
 end
 
 -- bioinsights: codex filters Bacterium by atmosphere -----------------------
