@@ -501,11 +501,33 @@ local SYSTEM_TOGGLE_LABEL = {
     [false] = "HIDE SYSTEM",
 }
 
+local SORT_MODE_LABEL = {
+    body  = "SORT BY BODY",
+    price = "SORT BY PRICE",
+}
+
+local DEFAULT_SORT_MODE = "body"
+
 local function system_toggle_label(plugin)
     return SYSTEM_TOGGLE_LABEL[plugin.is_system_hidden == true]
 end
 
+local function sort_mode_label(plugin)
+    return SORT_MODE_LABEL[plugin.sort_mode or DEFAULT_SORT_MODE]
+        or SORT_MODE_LABEL[DEFAULT_SORT_MODE]
+end
+
+local function sort_mode_is_primary(plugin)
+    return (plugin.sort_mode or DEFAULT_SORT_MODE) ~= DEFAULT_SORT_MODE
+end
+
 local TOOLBAR_BUTTON_BUILDERS = {
+    {
+        kind    = "cycle",
+        label   = sort_mode_label,
+        setter  = "cycle_sort_mode",
+        primary = sort_mode_is_primary,
+    },
     {
         label    = system_toggle_label,
         setter   = "set_system_hidden",
@@ -528,21 +550,42 @@ local TOOLBAR_BUTTON_BUILDERS = {
     },
 }
 
-local function resolve_toolbar_label(label, plugin)
-    if type(label) == "function" then return label(plugin) end
-    return label
+local function resolve_toolbar_value(value, plugin)
+    if type(value) == "function" then return value(plugin) end
+    return value
 end
 
-local function build_toolbar_item(plugin, definition)
-    if not plugin[definition.setter] then return nil end
+local function build_toggle_item(plugin, definition)
     return {
-        label = resolve_toolbar_label(definition.label, plugin),
+        label = resolve_toolbar_value(definition.label, plugin),
         primary = plugin[definition.flag] == true,
         on_click = function()
             plugin[definition.setter](plugin, not plugin[definition.flag])
             reset_grid_scroll(plugin.id)
         end,
     }
+end
+
+local function build_cycle_item(plugin, definition)
+    return {
+        label = resolve_toolbar_value(definition.label, plugin),
+        primary = resolve_toolbar_value(definition.primary, plugin) == true,
+        on_click = function()
+            plugin[definition.setter](plugin)
+            reset_grid_scroll(plugin.id)
+        end,
+    }
+end
+
+local TOOLBAR_ITEM_BUILDERS = {
+    toggle = build_toggle_item,
+    cycle  = build_cycle_item,
+}
+
+local function build_toolbar_item(plugin, definition)
+    if not plugin[definition.setter] then return nil end
+    local builder = TOOLBAR_ITEM_BUILDERS[definition.kind or "toggle"]
+    return builder(plugin, definition)
 end
 
 local function build_toolbar_items(plugin)

@@ -341,6 +341,11 @@ local function bios_label(body)
     return string.format("%d bio%s", count, plural)
 end
 
+local function body_sort_value(body)
+    local _, hi = body_value_bounds(body)
+    return hi or 0
+end
+
 local function build_card(body, system_name, hide_system)
     local card = {
         body           = body,
@@ -353,6 +358,7 @@ local function build_card(body, system_name, hide_system)
         bios           = bios_label(body),
         genuses        = {},
         unmapped_count = 0,
+        sort_value     = body_sort_value(body),
     }
     if #body.genus_order == 0 then
         card.unmapped_count = body.biological_count or 0
@@ -364,7 +370,33 @@ local function build_card(body, system_name, hide_system)
     return card
 end
 
-local function build_cards(settings, hide_system)
+local function compare_by_body(a, b)
+    if (a.system_name or "") ~= (b.system_name or "") then
+        return (a.system_name or "") < (b.system_name or "")
+    end
+    return (a.body.distance_ls or 0) < (b.body.distance_ls or 0)
+end
+
+local function compare_by_price(a, b)
+    if (a.sort_value or 0) ~= (b.sort_value or 0) then
+        return (a.sort_value or 0) > (b.sort_value or 0)
+    end
+    return compare_by_body(a, b)
+end
+
+local SORT_COMPARATORS = {
+    body  = compare_by_body,
+    price = compare_by_price,
+}
+
+local DEFAULT_SORT_MODE = "body"
+
+local function comparator_for(sort_mode)
+    return SORT_COMPARATORS[sort_mode or DEFAULT_SORT_MODE]
+        or SORT_COMPARATORS[DEFAULT_SORT_MODE]
+end
+
+local function build_cards(settings, hide_system, sort_mode)
     local list = {}
     for _, item in ipairs(plugin_state.systems_sorted()) do
         for _, body in pairs(item.system.bodies) do
@@ -373,12 +405,7 @@ local function build_cards(settings, hide_system)
             end
         end
     end
-    table.sort(list, function(a, b)
-        if (a.system_name or "") ~= (b.system_name or "") then
-            return (a.system_name or "") < (b.system_name or "")
-        end
-        return (a.body.distance_ls or 0) < (b.body.distance_ls or 0)
-    end)
+    table.sort(list, comparator_for(sort_mode))
     return list
 end
 
@@ -661,11 +688,11 @@ function CARD_VIEW.card_count(settings)
     return count
 end
 
-function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system)
+function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system, sort_mode)
     view_state = view_state or {}
     view_state.scroll = view_state.scroll or 0
     handle_wheel(view_state, x, y, w, h)
-    local cards = build_cards(settings, hide_system)
+    local cards = build_cards(settings, hide_system, sort_mode)
     if #cards == 0 then
         draw_empty_state(x, y, w, h)
         return view_state
