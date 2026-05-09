@@ -1,6 +1,7 @@
 local constants = require("plugins.bioinsights.constants")
 local handlers = require("plugins.bioinsights.handlers")
 local grid_builder = require("plugins.bioinsights.grid")
+local state = require("plugins.bioinsights.state")
 
 local Plugin = {
     id = "bioinsights",
@@ -36,6 +37,19 @@ local function refresh_grid()
     })
 end
 
+local function sync_state_context()
+    state.set_user_context({
+        near_nebula   = Plugin.near_nebula,
+        near_guardian = Plugin.near_guardian,
+    })
+end
+
+local function apply_user_context_change()
+    sync_state_context()
+    state.refresh_all_constraints()
+    refresh_grid()
+end
+
 local function send_notification(args)
     if not core_ref then return end
     core_ref:send_notification(args)
@@ -46,6 +60,7 @@ function Plugin:load(core)
     ensure_settings(self)
     handlers.set_notifier(send_notification)
     handlers.set_on_change(refresh_grid)
+    sync_state_context()
     refresh_grid()
 end
 
@@ -59,6 +74,16 @@ end
 function Plugin:set_grouping(is_enabled)
     self.group_by_body = is_enabled and true or false
     refresh_grid()
+end
+
+function Plugin:set_near_nebula(is_enabled)
+    self.near_nebula = is_enabled and true or false
+    apply_user_context_change()
+end
+
+function Plugin:set_near_guardian(is_enabled)
+    self.near_guardian = is_enabled and true or false
+    apply_user_context_change()
 end
 
 return Plugin

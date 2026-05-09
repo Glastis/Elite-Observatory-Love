@@ -487,25 +487,55 @@ local function reset_grid_scroll(plugin_id)
     gs.scroll = 0
 end
 
-local function draw_grouping_button(plugin, x, y, h, font)
-    if not plugin.set_grouping then return end
-    state.seg_group[plugin.id] = state.seg_group[plugin.id] or {}
-    local items = {
-        {
-            label = "GROUP BY BODY",
-            primary = plugin.group_by_body == true,
-            on_click = function()
-                plugin:set_grouping(not plugin.group_by_body)
-                reset_grid_scroll(plugin.id)
-            end,
-        },
+local TOOLBAR_BUTTON_BUILDERS = {
+    {
+        label    = "GROUP BY BODY",
+        setter   = "set_grouping",
+        flag     = "group_by_body",
+    },
+    {
+        label    = "CLOSE TO NEBULA",
+        setter   = "set_near_nebula",
+        flag     = "near_nebula",
+    },
+    {
+        label    = "CLOSE TO GUARDIAN",
+        setter   = "set_near_guardian",
+        flag     = "near_guardian",
+    },
+}
+
+local function build_toolbar_item(plugin, definition)
+    if not plugin[definition.setter] then return nil end
+    return {
+        label = definition.label,
+        primary = plugin[definition.flag] == true,
+        on_click = function()
+            plugin[definition.setter](plugin, not plugin[definition.flag])
+            reset_grid_scroll(plugin.id)
+        end,
     }
+end
+
+local function build_toolbar_items(plugin)
+    local items = {}
+    for _, definition in ipairs(TOOLBAR_BUTTON_BUILDERS) do
+        local item = build_toolbar_item(plugin, definition)
+        if item then table.insert(items, item) end
+    end
+    return items
+end
+
+local function draw_toolbar_buttons(plugin, x, y, h, font)
+    local items = build_toolbar_items(plugin)
+    if #items == 0 then return end
+    state.seg_group[plugin.id] = state.seg_group[plugin.id] or {}
     ui.seg.draw(state.seg_group[plugin.id], items, x, y,
         { h = h, font = font })
 end
 
 local function draw_plugin_toolbar(plugin, x, y, w, h, font)
-    draw_grouping_button(plugin, x, y, h, font)
+    draw_toolbar_buttons(plugin, x, y, h, font)
     draw_row_count(plugin, x + w, y, h, font)
 end
 

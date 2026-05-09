@@ -126,6 +126,14 @@ local function check_body_type(allowed, body)
     return false
 end
 
+local function check_parent_star(allowed, body)
+    local star = body.parent_star_type
+    if not star or star == "" then return nil end
+    if value_in_list(star, allowed) then return true end
+    if value_in_list(star:sub(1, 1), allowed) then return true end
+    return false
+end
+
 local function check_min(value, threshold)
     if value == nil then return nil end
     if value < threshold then return false end
@@ -168,24 +176,32 @@ local function check_volcanism(rule_value, body)
     return nil
 end
 
+local function check_user_flag(context, key)
+    if context and context[key] then return true end
+    return false
+end
+
 local CONSTRAINT_CHECKERS = {
-    atmosphere      = function(rule, body) return check_atmosphere(rule, body) end,
-    body_type       = function(rule, body) return check_body_type(rule, body) end,
-    min_gravity     = function(rule, body) return check_min(gravity_in_g(body), rule) end,
-    max_gravity     = function(rule, body) return check_max(gravity_in_g(body), rule) end,
-    min_temperature = function(rule, body) return check_min(temperature_k(body), rule) end,
-    max_temperature = function(rule, body) return check_max(temperature_k(body), rule) end,
-    min_pressure    = function(rule, body) return check_min(pressure_in_atm(body), rule) end,
-    max_pressure    = function(rule, body) return check_max(pressure_in_atm(body), rule) end,
-    volcanism       = function(rule, body) return check_volcanism(rule, body) end,
+    atmosphere      = function(rule, body, _) return check_atmosphere(rule, body) end,
+    body_type       = function(rule, body, _) return check_body_type(rule, body) end,
+    parent_star     = function(rule, body, _) return check_parent_star(rule, body) end,
+    min_gravity     = function(rule, body, _) return check_min(gravity_in_g(body), rule) end,
+    max_gravity     = function(rule, body, _) return check_max(gravity_in_g(body), rule) end,
+    min_temperature = function(rule, body, _) return check_min(temperature_k(body), rule) end,
+    max_temperature = function(rule, body, _) return check_max(temperature_k(body), rule) end,
+    min_pressure    = function(rule, body, _) return check_min(pressure_in_atm(body), rule) end,
+    max_pressure    = function(rule, body, _) return check_max(pressure_in_atm(body), rule) end,
+    volcanism       = function(rule, body, _) return check_volcanism(rule, body) end,
+    nebula          = function(_, _, context) return check_user_flag(context, "near_nebula") end,
+    guardian        = function(_, _, context) return check_user_flag(context, "near_guardian") end,
 }
 
-local function ruleset_matches(ruleset, body)
+local function ruleset_matches(ruleset, body, context)
     local indeterminate = false
     for key, rule in pairs(ruleset) do
         local checker = CONSTRAINT_CHECKERS[key]
         if checker then
-            local result = checker(rule, body)
+            local result = checker(rule, body, context)
             if result == false then return false end
             if result == nil then indeterminate = true end
         end
@@ -194,13 +210,13 @@ local function ruleset_matches(ruleset, body)
     return true
 end
 
-function codex.species_matches_body(species_label, body)
+function codex.species_matches_body(species_label, body, context)
     local entry = species_by_name[species_label]
     if not entry or not body then return nil end
     if not entry.rulesets or #entry.rulesets == 0 then return nil end
     local saw_indeterminate = false
     for _, ruleset in ipairs(entry.rulesets) do
-        local result = ruleset_matches(ruleset, body)
+        local result = ruleset_matches(ruleset, body, context)
         if result == true then return true end
         if result == nil then saw_indeterminate = true end
     end

@@ -8,6 +8,23 @@ local data = {
     current_system_address = nil,
 }
 
+local user_context = {
+    near_nebula   = false,
+    near_guardian = false,
+}
+
+function state.set_user_context(ctx)
+    ctx = ctx or {}
+    user_context = {
+        near_nebula   = ctx.near_nebula and true or false,
+        near_guardian = ctx.near_guardian and true or false,
+    }
+end
+
+function state.user_context()
+    return user_context
+end
+
 local SPECIES_STATUS = {
     PENDING   = "pending",
     CONFIRMED = "confirmed",
@@ -86,11 +103,14 @@ function state.ensure_body(system_address, body_id, body_name)
 end
 
 local function apply_codex_constraints(body, entry)
+    if entry.species_label then return end
     for species_label, status in pairs(entry.species_states) do
-        if status == SPECIES_STATUS.PENDING then
-            local match = species_codex.species_matches_body(species_label, body)
+        if status ~= SPECIES_STATUS.CONFIRMED then
+            local match = species_codex.species_matches_body(species_label, body, user_context)
             if match == false then
                 entry.species_states[species_label] = SPECIES_STATUS.EXCLUDED
+            else
+                entry.species_states[species_label] = SPECIES_STATUS.PENDING
             end
         end
     end
@@ -147,7 +167,7 @@ end
 
 local function genus_has_possible_species(body, genus_label)
     for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
-        if species_codex.species_matches_body(species_label, body) ~= false then
+        if species_codex.species_matches_body(species_label, body, user_context) ~= false then
             return true
         end
     end
@@ -170,6 +190,33 @@ function state.populate_candidate_genuses(body)
         if not body.genus_entries[genus_label]
             and genus_has_possible_species(body, genus_label) then
             state.ensure_genus(body, genus_label)
+        end
+    end
+end
+
+local function genus_can_be_pruned_after_refresh(body, genus_label, entry)
+    if entry.species_label or entry.dss_confirmed then return false end
+    return not genus_has_possible_species(body, genus_label)
+end
+
+local function drop_now_impossible_genuses(body)
+    local stale = {}
+    for genus_label, entry in pairs(body.genus_entries) do
+        if genus_can_be_pruned_after_refresh(body, genus_label, entry) then
+            table.insert(stale, genus_label)
+        end
+    end
+    for _, label in ipairs(stale) do remove_genus(body, label) end
+end
+
+function state.refresh_all_constraints()
+    for _, system in pairs(data.systems) do
+        for _, body in pairs(system.bodies) do
+            for _, entry in pairs(body.genus_entries) do
+                apply_codex_constraints(body, entry)
+            end
+            drop_now_impossible_genuses(body)
+            state.populate_candidate_genuses(body)
         end
     end
 end
