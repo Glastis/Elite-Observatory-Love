@@ -27,8 +27,21 @@ function M.count(s)
     return #s
 end
 
+local function print_run(s, x, y, font, sp)
+    if sp == 0 then
+        love.graphics.print(s, x, y)
+        return
+    end
+    local cursor = x
+    for _, cp in utf8.codes(s) do
+        local ch = utf8.char(cp)
+        love.graphics.print(ch, cursor, y)
+        cursor = cursor + font:getWidth(ch) + sp
+    end
+end
+
 -- opts:
---   color, font, letter_em, align ("left"|"center"|"right"), width.
+--   color, font, letter_em, align ("left"|"center"|"right"), width, bold.
 function M.draw(s, x, y, opts)
     if not s or s == "" then return 0 end
     opts = opts or {}
@@ -47,17 +60,8 @@ function M.draw(s, x, y, opts)
         draw_x = x + opts.width - total_w
     end
 
-    if sp == 0 then
-        love.graphics.print(s, draw_x, y)
-        return total_w
-    end
-
-    local cursor = draw_x
-    for _, cp in utf8.codes(s) do
-        local ch = utf8.char(cp)
-        love.graphics.print(ch, cursor, y)
-        cursor = cursor + font:getWidth(ch) + sp
-    end
+    print_run(s, draw_x, y, font, sp)
+    if opts.bold then print_run(s, draw_x + 1, y, font, sp) end
     return total_w
 end
 

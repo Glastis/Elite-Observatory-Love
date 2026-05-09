@@ -40,6 +40,8 @@ local FONT_GENUS          = { family = "mono_medium", size = 11 }
 local FONT_SPECIES        = { family = "mono",        size = 11 }
 local FONT_META           = { family = "mono",        size = 10 }
 
+local HIGH_VALUE_BOLD_THRESHOLD = 2 * 1000000
+
 local STATUS_CONFIRMED = "confirmed"
 local STATUS_PREDICTED = "predicted"
 local STATUS_PENDING   = "pending"
@@ -252,12 +254,14 @@ local function build_species_entries(entry, body)
     for _, species_label in ipairs(entry.species_order) do
         local status = status_for_species(entry, species_label)
         if status ~= STATUS_EXCLUDED then
+            local raw_value = species_values.for_species(species_label) or 0
             table.insert(list, {
-                label    = species_label,
-                short    = species_short_name(species_label),
-                status   = status,
-                variant  = variant_for_species(species_label, status, entry, body),
-                value    = format_value_str(species_values.for_species(species_label)),
+                label         = species_label,
+                short         = species_short_name(species_label),
+                status        = status,
+                variant       = variant_for_species(species_label, status, entry, body),
+                value         = format_value_str(raw_value),
+                is_high_value = raw_value >= HIGH_VALUE_BOLD_THRESHOLD,
             })
         end
     end
@@ -270,16 +274,25 @@ local function build_species_entries(entry, body)
     return list
 end
 
+local function any_species_high_value(species_list)
+    for _, sp in ipairs(species_list) do
+        if sp.is_high_value then return true end
+    end
+    return false
+end
+
 local function build_genus_block(body, genus_label)
     local entry = body.genus_entries[genus_label]
     local status = genus_status(entry)
     local right_resolver = GENUS_RIGHT_LABEL[status]
+    local species = build_species_entries(entry, body)
     return {
-        label   = genus_label,
-        entry   = entry,
-        status  = status,
-        species = build_species_entries(entry, body),
-        right   = right_resolver and right_resolver(entry) or nil,
+        label         = genus_label,
+        entry         = entry,
+        status        = status,
+        species       = species,
+        right         = right_resolver and right_resolver(entry) or nil,
+        is_high_value = any_species_high_value(species),
     }
 end
 
@@ -419,6 +432,7 @@ local function draw_genus_header(block, x, y, w)
     local genus_font = font_for(FONT_GENUS)
     text.draw(block.label, x, y, {
         font = genus_font, color = theme.colors.text, letter_em = 0.08,
+        bold = block.is_high_value,
     })
     if not block.right then return end
     local renderer = GENUS_RIGHT_RENDERERS[block.right.kind]
@@ -442,22 +456,25 @@ local function draw_species_badge(sp, x, y)
     love.graphics.setLineWidth(prev_w)
 end
 
-local function draw_species_variant(variant_label, x, y, max_w)
-    if not variant_label or variant_label == "" then return end
+local function draw_species_variant(sp, x, y, max_w)
+    if not sp.variant or sp.variant == "" then return end
     if max_w <= 0 then return end
     local meta_font = font_for(FONT_META)
-    local fitted = text.truncate_right("(" .. variant_label .. ")",
+    local fitted = text.truncate_right("(" .. sp.variant .. ")",
         meta_font, max_w, 0.04)
     text.draw(fitted, x, y + 1, {
         font = meta_font, color = theme.colors.text_faint, letter_em = 0.04,
+        bold = sp.is_high_value,
     })
 end
 
 local function draw_species_value(sp, x, y, w)
     local meta_font = font_for(FONT_META)
     local rw = text.width(sp.value, meta_font, 0.06)
+    local color_key = sp.is_high_value and "text" or "text_dim"
     text.draw(sp.value, x + w - rw, y + 1, {
-        font = meta_font, color = theme.colors.text_dim, letter_em = 0.06,
+        font = meta_font, color = theme.colors[color_key], letter_em = 0.06,
+        bold = sp.is_high_value,
     })
     return rw
 end
@@ -468,12 +485,13 @@ local function draw_species_row(sp, x, y, w)
     local label_x = x + STATUS_BADGE_W
     text.draw(sp.short, label_x, y, {
         font = species_font, color = species_label_color(sp.status),
+        bold = sp.is_high_value,
     })
     local label_w = text.width(sp.short, species_font, 0)
     local value_w = draw_species_value(sp, x, y, w)
     local variant_x = label_x + label_w + SPECIES_VARIANT_GAP
     local variant_max_w = (x + w - value_w - SPECIES_VARIANT_GAP) - variant_x
-    draw_species_variant(sp.variant, variant_x, y, variant_max_w)
+    draw_species_variant(sp, variant_x, y, variant_max_w)
 end
 
 local function draw_genus_block(block, x, y, w)
