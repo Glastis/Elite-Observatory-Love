@@ -9,6 +9,7 @@ local CARD_GAP             = 12
 local CARD_PAD_X           = 14
 local CARD_PAD_Y           = 12
 local CARD_HEADER_H        = 22
+local CARD_DISTANCE_H      = 16
 local CARD_SUB_H           = 18
 local CARD_INTERNAL_GAP    = 10
 local BADGE_ROW_H          = 20
@@ -36,7 +37,6 @@ local FONT_FOOTER   = { family = "mono",        size = 10 }
 local FONT_EMPTY    = { family = "mono",        size = 11 }
 
 local TITLE_TRAILING_GAP = 12
-local TITLE_VALUE_GAP    = 14
 
 local HIGH_VALUE_BOLD_THRESHOLD = 2 * 1000000
 
@@ -350,7 +350,7 @@ local function compute_card_layout(card, card_w)
 end
 
 local function card_height(card)
-    local h = CARD_PAD_Y * 2 + CARD_HEADER_H + CARD_SUB_H
+    local h = CARD_PAD_Y * 2 + CARD_HEADER_H + CARD_DISTANCE_H + CARD_SUB_H
     local badges_h = badges_block_height(card.badge_rows)
     if badges_h > 0 then
         h = h + CARD_INTERNAL_GAP + badges_h
@@ -375,23 +375,27 @@ end
 local function draw_card_title(card, x, y, w)
     local title_font = font_for(FONT_TITLE)
     local value_font = font_for(FONT_VALUE)
-    local dist_font  = font_for(FONT_DISTANCE)
     local value_w = text.width(card.value_text, value_font, 0.1)
-    local dist_w  = text.width(card.distance_text, dist_font, 0.05)
-    local value_x = x + w - value_w
-    local dist_x  = value_x - dist_w - TITLE_VALUE_GAP
-    local title_w = math.max(0, dist_x - x - TITLE_TRAILING_GAP)
+    local title_w = math.max(0, w - value_w - TITLE_TRAILING_GAP)
     local fitted = text.truncate_right(card.title, title_font, title_w, 0)
     text.draw(fitted, x, y, {
         font = title_font, color = theme.colors.text,
         bold = card.is_high_value,
     })
-    text.draw(card.distance_text, dist_x, y + 2, {
-        font = dist_font, color = theme.colors.text, letter_em = 0.05,
-    })
-    text.draw(card.value_text, value_x, y + 2, {
+    text.draw(card.value_text, x + w - value_w, y + 2, {
         font = value_font, color = theme.colors.accent, letter_em = 0.1,
         bold = card.is_high_value,
+    })
+end
+
+local function draw_card_distance(card, x, y, w)
+    if not card.distance_text or card.distance_text == constants.UNKNOWN_TEXT then
+        return
+    end
+    local dist_font = font_for(FONT_DISTANCE)
+    local dist_w = text.width(card.distance_text, dist_font, 0.05)
+    text.draw(card.distance_text, x + w - dist_w, y, {
+        font = dist_font, color = theme.colors.text, letter_em = 0.05,
     })
 end
 
@@ -465,6 +469,8 @@ local function draw_card(card, x, y, w, h)
     local cy = y + CARD_PAD_Y
     draw_card_title(card, inner_x, cy, inner_w)
     cy = cy + CARD_HEADER_H
+    draw_card_distance(card, inner_x, cy, inner_w)
+    cy = cy + CARD_DISTANCE_H
     draw_card_subheader(card, inner_x, cy, inner_w)
     cy = cy + CARD_SUB_H
     if #card.badge_rows > 0 then
