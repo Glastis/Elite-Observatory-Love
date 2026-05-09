@@ -24,7 +24,7 @@ return {
     MAP_LABEL_YES            = "*",
     MAP_LABEL_NO             = "",
 
-    DEFAULT_MIN_BODY_VALUE          = 50000,
+    DEFAULT_MIN_BODY_VALUE          = 400000,
     DEFAULT_MIN_VALUE_FOR_MAPPING   = 200000,
     DEFAULT_MAX_DISTANCE_ELW        = 100000,
     DEFAULT_MAX_DISTANCE_WW         = 100000,
