@@ -1,11 +1,4 @@
 return {
-    ["$Codex_Ent_Stratum_04_Name;"] = {
-        ["$Codex_Ent_Stratum_04_Name;"] = {
-            name = "Stratum Aranaemus",
-            rulesets = {},
-            value = 2448900,
-        },
-    },
     ["$Codex_Ent_Stratum_Genus_Name;"] = {
         ["$Codex_Ent_Stratum_01_Name;"] = {
             name = "Stratum Excutitus",
