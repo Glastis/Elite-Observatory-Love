@@ -1,17 +1,19 @@
 local constants = require("plugins.evaluator.constants")
 local handlers = require("plugins.evaluator.handlers")
-local grid_builder = require("plugins.evaluator.grid")
+local card_view = require("plugins.evaluator.card_view")
+
+local SORT_MODE_CYCLE = {
+    body  = "price",
+    price = "body",
+}
+
+local DEFAULT_SORT_MODE = "price"
 
 local Plugin = {
     id = "evaluator",
     name = "Observatory Evaluator",
     short_name = "Evaluator",
-    version = "0.1.0",
-    grid = {
-        columns = constants.GRID_COLUMNS,
-        column_align = constants.COLUMN_ALIGN,
-        rows = {},
-    },
+    version = "0.2.0",
     default_settings = {
         minimum_body_value          = constants.DEFAULT_MIN_BODY_VALUE,
         minimum_mapping_value       = constants.DEFAULT_MIN_VALUE_FOR_MAPPING,
@@ -36,12 +38,6 @@ local function ensure_settings(plugin)
     end
 end
 
-local function refresh_grid()
-    grid_builder.rebuild(Plugin.grid, Plugin.settings, {
-        group_by_body = Plugin.group_by_body,
-    })
-end
-
 local function send_notification(args)
     if not core_ref then return end
     core_ref:send_notification(args)
@@ -50,9 +46,8 @@ end
 function Plugin:load(core)
     core_ref = core
     ensure_settings(self)
+    if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
     handlers.set_notifier(send_notification)
-    handlers.set_on_change(refresh_grid)
-    refresh_grid()
 end
 
 function Plugin:journal_event(entry)
@@ -62,9 +57,28 @@ end
 function Plugin:status_change(_)
 end
 
-function Plugin:set_grouping(is_enabled)
-    self.group_by_body = is_enabled and true or false
-    refresh_grid()
+function Plugin:set_system_hidden(is_enabled)
+    self.is_system_hidden = is_enabled and true or false
+end
+
+function Plugin:set_scanned_hidden(is_enabled)
+    self.is_scanned_hidden = is_enabled and true or false
+end
+
+function Plugin:cycle_sort_mode()
+    local current = self.sort_mode or DEFAULT_SORT_MODE
+    self.sort_mode = SORT_MODE_CYCLE[current] or DEFAULT_SORT_MODE
+end
+
+function Plugin:draw_view(view_state, x, y, w, h)
+    return card_view.draw(view_state, x, y, w, h, self.settings,
+        self.is_system_hidden, self.sort_mode or DEFAULT_SORT_MODE,
+        self.is_scanned_hidden)
+end
+
+function Plugin:row_count_label()
+    return string.format("%d BODIES",
+        card_view.card_count(self.settings, self.is_scanned_hidden))
 end
 
 return Plugin
