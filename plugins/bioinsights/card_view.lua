@@ -212,11 +212,25 @@ local function body_potential_max(body)
     return best
 end
 
-local function should_skip_body(body, settings)
+local function is_body_fully_scanned(body)
+    if not body or (body.biological_count or 0) <= 0 then return false end
+    local complete = 0
+    for _, genus_label in ipairs(body.genus_order) do
+        local entry = body.genus_entries[genus_label]
+        if entry and entry.species_label
+            and (entry.sample_index or 0) >= SCAN_DOTS_TOTAL then
+            complete = complete + 1
+        end
+    end
+    return complete >= body.biological_count
+end
+
+local function should_skip_body(body, settings, hide_scanned)
     if not body then return true end
     if body.biological_count <= 0 and #body.genus_order == 0 then
         return true
     end
+    if hide_scanned and is_body_fully_scanned(body) then return true end
     if not settings or not settings.only_show_high_value then return false end
     if #body.genus_order == 0 then return false end
     return body_potential_max(body) < (settings.minimum_high_value or 0)
@@ -396,11 +410,11 @@ local function comparator_for(sort_mode)
         or SORT_COMPARATORS[DEFAULT_SORT_MODE]
 end
 
-local function build_cards(settings, hide_system, sort_mode)
+local function build_cards(settings, hide_system, sort_mode, hide_scanned)
     local list = {}
     for _, item in ipairs(plugin_state.systems_sorted()) do
         for _, body in pairs(item.system.bodies) do
-            if not should_skip_body(body, settings) then
+            if not should_skip_body(body, settings, hide_scanned) then
                 table.insert(list, build_card(body, item.system.name, hide_system))
             end
         end
@@ -676,11 +690,11 @@ local function draw_grid(layout, view_state, x, y, w, h)
     love.graphics.setScissor()
 end
 
-function CARD_VIEW.card_count(settings)
+function CARD_VIEW.card_count(settings, hide_scanned)
     local count = 0
     for _, item in ipairs(plugin_state.systems_sorted()) do
         for _, body in pairs(item.system.bodies) do
-            if not should_skip_body(body, settings) then
+            if not should_skip_body(body, settings, hide_scanned) then
                 count = count + 1
             end
         end
@@ -688,11 +702,11 @@ function CARD_VIEW.card_count(settings)
     return count
 end
 
-function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system, sort_mode)
+function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system, sort_mode, hide_scanned)
     view_state = view_state or {}
     view_state.scroll = view_state.scroll or 0
     handle_wheel(view_state, x, y, w, h)
-    local cards = build_cards(settings, hide_system, sort_mode)
+    local cards = build_cards(settings, hide_system, sort_mode, hide_scanned)
     if #cards == 0 then
         draw_empty_state(x, y, w, h)
         return view_state

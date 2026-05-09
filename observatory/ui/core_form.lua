@@ -501,6 +501,11 @@ local SYSTEM_TOGGLE_LABEL = {
     [false] = "HIDE SYSTEM",
 }
 
+local SCANNED_TOGGLE_LABEL = {
+    [true]  = "SHOW SCANNED",
+    [false] = "HIDE SCANNED",
+}
+
 local SORT_MODE_LABEL = {
     body  = "SORT BY BODY",
     price = "SORT BY PRICE",
@@ -510,6 +515,10 @@ local DEFAULT_SORT_MODE = "body"
 
 local function system_toggle_label(plugin)
     return SYSTEM_TOGGLE_LABEL[plugin.is_system_hidden == true]
+end
+
+local function scanned_toggle_label(plugin)
+    return SCANNED_TOGGLE_LABEL[plugin.is_scanned_hidden == true]
 end
 
 local function sort_mode_label(plugin)
@@ -532,6 +541,11 @@ local TOOLBAR_BUTTON_BUILDERS = {
         label    = system_toggle_label,
         setter   = "set_system_hidden",
         flag     = "is_system_hidden",
+    },
+    {
+        label    = scanned_toggle_label,
+        setter   = "set_scanned_hidden",
+        flag     = "is_scanned_hidden",
     },
     {
         label    = "GROUP BY BODY",

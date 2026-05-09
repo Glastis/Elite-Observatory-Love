@@ -53,6 +53,7 @@ end
 function Plugin:load(core)
     core_ref = core
     ensure_settings(self)
+    if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
     handlers.set_notifier(send_notification)
     sync_state_context()
 end
@@ -78,6 +79,10 @@ function Plugin:set_system_hidden(is_enabled)
     self.is_system_hidden = is_enabled and true or false
 end
 
+function Plugin:set_scanned_hidden(is_enabled)
+    self.is_scanned_hidden = is_enabled and true or false
+end
+
 function Plugin:cycle_sort_mode()
     local current = self.sort_mode or DEFAULT_SORT_MODE
     self.sort_mode = SORT_MODE_CYCLE[current] or DEFAULT_SORT_MODE
@@ -85,11 +90,13 @@ end
 
 function Plugin:draw_view(view_state, x, y, w, h)
     return card_view.draw(view_state, x, y, w, h, self.settings,
-        self.is_system_hidden, self.sort_mode or DEFAULT_SORT_MODE)
+        self.is_system_hidden, self.sort_mode or DEFAULT_SORT_MODE,
+        self.is_scanned_hidden)
 end
 
 function Plugin:row_count_label()
-    return string.format("%d BODIES", card_view.card_count(self.settings))
+    return string.format("%d BODIES",
+        card_view.card_count(self.settings, self.is_scanned_hidden))
 end
 
 return Plugin
