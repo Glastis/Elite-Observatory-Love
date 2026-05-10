@@ -5,6 +5,7 @@ local panel           = require("observatory.ui.panel")
 local plugin_state    = require("plugins.bioinsights.state")
 local species_values  = require("plugins.bioinsights.species_values")
 local variants        = require("plugins.bioinsights.variants")
+local body_value      = require("plugins.bioinsights.body_value")
 local constants       = require("plugins.bioinsights.constants")
 
 local CARD_GAP            = 12
@@ -165,67 +166,12 @@ local function format_sample_distance_text(meters)
         format_sample_distance_value(meters))
 end
 
-local function genus_value_bounds(body, genus_label)
-    local entry = body.genus_entries[genus_label]
-    if not entry then
-        local range = species_values.for_genus(genus_label)
-        if range then return range.min, range.max end
-        return 0, 0
-    end
-    local lo, hi
-    for species_label, status in pairs(entry.species_states) do
-        if status ~= STATUS_EXCLUDED then
-            local v = species_values.for_species(species_label) or 0
-            if status == STATUS_CONFIRMED then return v, v end
-            if not lo or v < lo then lo = v end
-            if not hi or v > hi then hi = v end
-        end
-    end
-    if not lo then return 0, 0 end
-    return lo, hi
-end
-
-local function body_value_bounds(body)
-    local total_lo, total_hi = 0, 0
-    for _, genus_label in ipairs(body.genus_order) do
-        local lo, hi = genus_value_bounds(body, genus_label)
-        total_lo = total_lo + lo
-        total_hi = total_hi + hi
-    end
-    return total_lo, total_hi
-end
-
 local function format_body_value(body)
-    local lo, hi = body_value_bounds(body)
+    local lo, hi = body_value.body_value_bounds(body)
     if hi <= 0 then return constants.UNKNOWN_TEXT end
     if lo == hi then return format_value_str(lo) end
     return string.format(constants.VALUE_RANGE_FORMAT,
         format_number(lo), format_number(hi))
-end
-
-local function exact_value_for_entry(entry)
-    if entry.confirmed_value and entry.confirmed_value > 0 then
-        return entry.confirmed_value
-    end
-    if not entry.species_label then return nil end
-    return species_values.for_species(entry.species_label)
-end
-
-local function genus_potential_max(entry, genus_label)
-    local exact = exact_value_for_entry(entry)
-    if exact then return exact end
-    local range = species_values.for_genus(genus_label)
-    if range then return range.max end
-    return 0
-end
-
-local function body_potential_max(body)
-    local best = 0
-    for _, genus_label in ipairs(body.genus_order) do
-        local v = genus_potential_max(body.genus_entries[genus_label], genus_label)
-        if v > best then best = v end
-    end
-    return best
 end
 
 local function is_body_fully_scanned(body)
@@ -249,7 +195,7 @@ local function should_skip_body(body, settings, hide_scanned)
     if hide_scanned and is_body_fully_scanned(body) then return true end
     if not settings or not settings.only_show_high_value then return false end
     if #body.genus_order == 0 then return false end
-    return body_potential_max(body) < (settings.minimum_high_value or 0)
+    return body_value.body_potential_max(body) < (settings.minimum_high_value or 0)
 end
 
 local function status_for_species(entry, species_label)
@@ -372,7 +318,7 @@ local function bios_label(body)
 end
 
 local function body_sort_value(body)
-    local _, hi = body_value_bounds(body)
+    local _, hi = body_value.body_value_bounds(body)
     return hi or 0
 end
 

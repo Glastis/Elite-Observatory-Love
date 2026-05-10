@@ -2,6 +2,7 @@ local constants = require("plugins.bioinsights.constants")
 local state = require("plugins.bioinsights.state")
 local species_values = require("plugins.bioinsights.species_values")
 local variants = require("plugins.bioinsights.variants")
+local body_value = require("plugins.bioinsights.body_value")
 local hierarchy = require("observatory.grid_hierarchy")
 
 local grid = {}
@@ -30,18 +31,8 @@ local function display_name(body)
     return constants.UNNAMED_BODY_PLACEHOLDER
 end
 
-local function exact_value_for_entry(genus_entry)
-    if genus_entry.confirmed_value and genus_entry.confirmed_value > 0 then
-        return genus_entry.confirmed_value
-    end
-    if not genus_entry.species_label then return nil end
-    local exact = species_values.for_species(genus_entry.species_label)
-    if exact and exact > 0 then return exact end
-    return nil
-end
-
 local function format_value_for_genus(genus_entry, genus_label)
-    local exact = exact_value_for_entry(genus_entry)
+    local exact = body_value.exact_value_for_entry(genus_entry)
     if exact then
         return string.format(constants.VALUE_FORMAT, format_number(exact))
     end
@@ -62,41 +53,8 @@ local function format_value_for_species(species_label)
     return constants.UNKNOWN_TEXT
 end
 
-local function genus_value_bounds(body, genus_label)
-    local entry = body.genus_entries[genus_label]
-    if not entry then
-        local range = species_values.for_genus(genus_label)
-        if range then return range.min, range.max end
-        return 0, 0
-    end
-    local lo, hi
-    for species_label, status in pairs(entry.species_states) do
-        if status ~= "excluded" then
-            local v = species_values.for_species(species_label) or 0
-            if status == "confirmed" then return v, v end
-            if not lo or v < lo then lo = v end
-            if not hi or v > hi then hi = v end
-        end
-    end
-    if not lo then return 0, 0 end
-    return lo, hi
-end
-
-local function body_value_bounds(body)
-    local total_lo, total_hi = 0, 0
-    if not body.genus_order or #body.genus_order == 0 then
-        return 0, 0
-    end
-    for _, genus_label in ipairs(body.genus_order) do
-        local lo, hi = genus_value_bounds(body, genus_label)
-        total_lo = total_lo + lo
-        total_hi = total_hi + hi
-    end
-    return total_lo, total_hi
-end
-
 local function format_body_value(body)
-    local lo, hi = body_value_bounds(body)
+    local lo, hi = body_value.body_value_bounds(body)
     if hi <= 0 then return constants.UNKNOWN_TEXT end
     if lo == hi then
         return string.format(constants.VALUE_FORMAT, format_number(lo))
@@ -223,23 +181,6 @@ local function body_header_row(body, body_label)
     }
 end
 
-local function genus_potential_max(genus_entry, genus_label)
-    local exact = exact_value_for_entry(genus_entry)
-    if exact then return exact end
-    local range = species_values.for_genus(genus_label)
-    if range then return range.max end
-    return 0
-end
-
-local function body_potential_max(body)
-    local best = 0
-    for _, genus_label in ipairs(body.genus_order) do
-        local value = genus_potential_max(body.genus_entries[genus_label], genus_label)
-        if value > best then best = value end
-    end
-    return best
-end
-
 local function should_skip_body(body, settings)
     if not body then return true end
     if body.biological_count <= 0 and #body.genus_order == 0 then
@@ -247,7 +188,7 @@ local function should_skip_body(body, settings)
     end
     if not settings or not settings.only_show_high_value then return false end
     if #body.genus_order == 0 then return false end
-    return body_potential_max(body) < (settings.minimum_high_value or 0)
+    return body_value.body_potential_max(body) < (settings.minimum_high_value or 0)
 end
 
 local function bodies_with_biology(bodies)
