@@ -41,7 +41,13 @@ local WHEEL_STEP_PX       = 40
 local UNNAMED_PLACEHOLDER = "(unscanned)"
 local EMPTY_TEXT          = "(no scans yet — fly somewhere)"
 
-local KIND_UNKNOWN = "unknown"
+local KIND_UNKNOWN    = "unknown"
+local KIND_BARYCENTRE = "barycentre"
+local BARYCENTRE_LABEL = "Barycentre"
+
+local function is_barycentre(body)
+    return body and body.kind == KIND_BARYCENTRE
+end
 
 local KIND_ICON_GLYPHS = {
     star       = icon.star,
@@ -138,14 +144,43 @@ end
 
 local function sort_compare(a, b, nodes)
     local na, nb = nodes[a], nodes[b]
-    local da = na.distance_num or math.huge
-    local db = nb.distance_num or math.huge
+    local da = na._effective_distance or math.huge
+    local db = nb._effective_distance or math.huge
     if da ~= db then return da < db end
     return (na.name or "") < (nb.name or "")
 end
 
 local function sort_ids(ids, nodes)
     table.sort(ids, function(a, b) return sort_compare(a, b, nodes) end)
+end
+
+local function compute_effective_distance(id, nodes, children, memo)
+    if memo[id] ~= nil then return memo[id] end
+    memo[id] = math.huge
+    local body = nodes[id]
+    if body and body.distance_num then
+        memo[id] = body.distance_num
+        return memo[id]
+    end
+    local kids = children[id]
+    if not kids then return memo[id] end
+    local min_d = math.huge
+    for _, kid_id in ipairs(kids) do
+        local d = compute_effective_distance(kid_id, nodes, children, memo)
+        if d < min_d then min_d = d end
+    end
+    memo[id] = min_d
+    return min_d
+end
+
+local function annotate_effective_distance(nodes, children)
+    local memo = {}
+    for id in pairs(nodes) do
+        compute_effective_distance(id, nodes, children, memo)
+    end
+    for id, body in pairs(nodes) do
+        body._effective_distance = memo[id]
+    end
 end
 
 local function build_tree(bodies)
@@ -155,6 +190,7 @@ local function build_tree(bodies)
     end
     expand_ancestors(nodes, bodies)
     local roots, children = partition_tree(nodes)
+    annotate_effective_distance(nodes, children)
     sort_ids(roots, nodes)
     for _, list in pairs(children) do sort_ids(list, nodes) end
     return nodes, children, roots
@@ -207,19 +243,24 @@ end
 
 local function attach_display_names(rows, nodes)
     for _, row in ipairs(rows) do
-        local name = raw_name(row.body)
-        if not name then
-            row.display = UNNAMED_PLACEHOLDER
-        elseif row.depth == 0 then
-            row.display = name
+        if is_barycentre(row.body) then
+            row.display = BARYCENTRE_LABEL
         else
-            local parent = nodes[row.body.parent_body_id]
-            row.display = strip_prefix(name, raw_name(parent))
+            local name = raw_name(row.body)
+            if not name then
+                row.display = UNNAMED_PLACEHOLDER
+            elseif row.depth == 0 then
+                row.display = name
+            else
+                local parent = nodes[row.body.parent_body_id]
+                row.display = strip_prefix(name, raw_name(parent))
+            end
         end
     end
 end
 
 local function name_color(body)
+    if is_barycentre(body) then return theme.colors.text_dim end
     if not body or not body.scanned then return theme.colors.text_faint end
     return kind_color(body.kind or KIND_UNKNOWN, true)
 end
@@ -359,14 +400,29 @@ local function draw_row_meta(row, type_x, status_x, distance_x, value_x, y, h)
         value_color_for(body), "right")
 end
 
+local NAME_RIGHT_PADDING = 8
+
+local function draw_barycentre_row(row, x, y, w, h, name_x)
+    local name_w = math.max(0, (x + w) - name_x - NAME_RIGHT_PADDING)
+    draw_name(row, name_x, y, name_w, h)
+end
+
+local function draw_full_row(row, x, y, w, h, name_x)
+    local type_x, status_x, distance_x, value_x = build_text_columns(x + w)
+    local name_w = math.max(0, type_x - name_x - NAME_RIGHT_PADDING)
+    draw_name(row, name_x, y, name_w, h)
+    draw_row_meta(row, type_x, status_x, distance_x, value_x, y, h)
+end
+
 local function draw_row(row, x, y, w, h)
     draw_connectors(row, x, y, h)
     local icon_right = draw_kind_icon(row, x, y, h)
-    local type_x, status_x, distance_x, value_x = build_text_columns(x + w)
     local name_x = icon_right + ICON_TEXT_GAP
-    local name_w = math.max(0, type_x - name_x - 8)
-    draw_name(row, name_x, y, name_w, h)
-    draw_row_meta(row, type_x, status_x, distance_x, value_x, y, h)
+    if is_barycentre(row.body) then
+        draw_barycentre_row(row, x, y, w, h, name_x)
+    else
+        draw_full_row(row, x, y, w, h, name_x)
+    end
 end
 
 local function clamp_scroll(view_state, content_h, view_h)

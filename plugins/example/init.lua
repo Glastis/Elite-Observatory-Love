@@ -75,10 +75,33 @@ local function ensure_body_stub(plugin, body_id)
     }
 end
 
-local function ensure_parent_chain(plugin, parents)
-    journal_helpers.ensure_parent_chain(
-        function(_, body_id) ensure_body_stub(plugin, body_id) end,
-        nil, parents)
+local NULL_PARENT_KIND        = "Null"
+local BARYCENTRE_KIND_LABEL   = "barycentre"
+
+local function pick_immediate_parent(parents)
+    if type(parents) ~= "table" then return nil, nil end
+    for _, parent in ipairs(parents) do
+        for kind, body_id in pairs(parent) do
+            if body_id and body_id > 0 then
+                return body_id, kind
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function ensure_immediate_chain(plugin, parents)
+    if type(parents) ~= "table" then return end
+    for _, parent in ipairs(parents) do
+        for kind, body_id in pairs(parent) do
+            if body_id and body_id > 0 then
+                ensure_body_stub(plugin, body_id)
+                if kind == NULL_PARENT_KIND then
+                    plugin._bodies[body_id].kind = BARYCENTRE_KIND_LABEL
+                end
+            end
+        end
+    end
 end
 
 local function is_terraformable(entry)
@@ -107,10 +130,12 @@ end
 local function record_scan(plugin, entry)
     local body_id = entry.BodyID
     if body_id == nil then return end
-    ensure_parent_chain(plugin, entry.Parents)
+    ensure_immediate_chain(plugin, entry.Parents)
     ensure_body_stub(plugin, body_id)
-    local parent_id, parent_kind = journal_helpers.extract_parent(entry.Parents)
-    update_body_from_scan(plugin._bodies[body_id], entry, parent_id, parent_kind)
+    local immediate_parent_id = pick_immediate_parent(entry.Parents)
+    local _, kind_parent = journal_helpers.extract_parent(entry.Parents)
+    update_body_from_scan(plugin._bodies[body_id], entry,
+        immediate_parent_id, kind_parent)
 end
 
 local function reset_bodies(plugin)
