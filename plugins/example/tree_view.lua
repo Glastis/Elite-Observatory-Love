@@ -20,7 +20,12 @@ local DISTANCE_RESERVE    = 110
 local DISTANCE_GAP        = 12
 local VALUE_RESERVE       = 90
 local SCROLLBAR_RESERVE   = 6
-local HIGH_VALUE_THRESHOLD = 2000000
+
+local VALUE_BANDS = {
+    { min = 400000, color_key = "success"  },
+    { min = 100000, color_key = "accent"   },
+    { min = 0,      color_key = "text_dim" },
+}
 
 local STATUS_LABEL_FIRST     = "FIRST"
 local STATUS_LABEL_FIRST_MAP = "1ST MAP"
@@ -325,8 +330,10 @@ end
 
 local function value_color_for(body)
     if not body or not body.scanned then return theme.colors.text_faint end
-    local value = body.is_star and body.current_value or body.potential_max
-    if (value or 0) >= HIGH_VALUE_THRESHOLD then return theme.colors.accent end
+    local value = (body.is_star and body.current_value or body.potential_max) or 0
+    for _, band in ipairs(VALUE_BANDS) do
+        if value >= band.min then return theme.colors[band.color_key] end
+    end
     return theme.colors.text
 end
 

@@ -42,8 +42,8 @@ M.MIN_BODY_VALUE = 500
 
 M.VALUE_MILLION         = 1000000
 M.VALUE_THOUSAND        = 1000
-M.VALUE_MILLION_FORMAT  = "%.1fM"
-M.VALUE_THOUSAND_FORMAT = "%.1fK"
+M.VALUE_MILLION_FORMAT  = "%.1f M"
+M.VALUE_THOUSAND_FORMAT = "%.1f K"
 M.UNKNOWN_TEXT          = "-"
 
 local function clamped_mass(mass_em)
