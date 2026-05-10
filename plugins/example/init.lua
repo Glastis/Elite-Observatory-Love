@@ -1,44 +1,72 @@
-local hierarchy = require("observatory.grid_hierarchy")
+local tree_view = require("plugins.example.tree_view")
 
-local NULL_PARENT_KIND = "Null"
-local UNNAMED_BODY_PLACEHOLDER = "(unscanned)"
-local DISTANCE_FORMAT = "%.1f"
-local NOTIFY_TITLE_LANDABLE = "Landable Body"
-local NOTIFY_TITLE_FSD_JUMP = "FSD Jump"
-local NOTIFY_DEFAULT_SYSTEM = "Unknown system"
+local NULL_PARENT_KIND        = "Null"
+local NOTIFY_TITLE_LANDABLE   = "Landable Body"
+local NOTIFY_TITLE_FSD_JUMP   = "FSD Jump"
+local NOTIFY_DEFAULT_SYSTEM   = "Unknown system"
+local DISTANCE_FORMAT         = "%.1f"
+local TIME_PATTERN            = "T(%d%d:%d%d:%d%d)"
+local DEFAULT_KIND            = "other"
+
+local PARENT_KIND_TO_KIND = {
+    Star   = "planet",
+    Planet = "moon",
+    Ring   = "ring",
+}
+
+local EVENT_KIND_OVERRIDES = {
+    ScanBaryCentre = "barycentre",
+}
 
 local Plugin = {
-    id = "example",
-    name = "Explorer",
-    short_name = "Explorer",
-    version = "0.1.0",
-    grid = {
-        columns = { "Time", "Body", "Type", "Distance (Ls)" },
-        column_align = { ["Distance (Ls)"] = "right" },
-        rows = {},
-    },
+    id              = "example",
+    name            = "Explorer",
+    short_name      = "Explorer",
+    version         = "0.2.0",
     default_settings = {
         notify_on_landable = true,
     },
-    group_by_body = false,
     _bodies = {},
 }
 
 local core_ref
 
-local function format_distance(distance_ls)
-    if type(distance_ls) ~= "number" then return "" end
-    return string.format(DISTANCE_FORMAT, distance_ls)
+local function ensure_settings(plugin)
+    plugin.settings = plugin.settings or {}
+    for key, value in pairs(plugin.default_settings) do
+        if plugin.settings[key] == nil then plugin.settings[key] = value end
+    end
 end
 
-local function extract_parent_body_id(parents)
-    if type(parents) ~= "table" then return nil end
+local function format_distance(distance_ls)
+    if type(distance_ls) ~= "number" then return "" end
+    return string.format(DISTANCE_FORMAT, distance_ls) .. " Ls"
+end
+
+local function short_time(timestamp)
+    if type(timestamp) ~= "string" then return "" end
+    return timestamp:match(TIME_PATTERN) or ""
+end
+
+local function extract_parent_info(parents)
+    if type(parents) ~= "table" then return nil, nil end
     for _, parent in ipairs(parents) do
         for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then return body_id end
+            if kind ~= NULL_PARENT_KIND then return body_id, kind end
         end
     end
-    return nil
+    return nil, nil
+end
+
+local function detect_kind(entry, parent_kind)
+    if EVENT_KIND_OVERRIDES[entry.event] then
+        return EVENT_KIND_OVERRIDES[entry.event]
+    end
+    if entry.StarType then return "star" end
+    if entry.PlanetClass then
+        return PARENT_KIND_TO_KIND[parent_kind] or "planet"
+    end
+    return DEFAULT_KIND
 end
 
 local function ensure_body_stub(plugin, body_id)
@@ -49,8 +77,11 @@ local function ensure_body_stub(plugin, body_id)
         name           = nil,
         type           = "",
         distance       = "",
+        distance_num   = nil,
         time           = "",
+        kind           = "unknown",
         parent_body_id = nil,
+        parent_kind    = nil,
         scanned        = false,
     }
 end
@@ -64,92 +95,31 @@ local function ensure_parent_chain(plugin, parents)
     end
 end
 
+local function update_body_from_scan(body, entry, parent_id, parent_kind)
+    body.name           = entry.BodyName or body.name or "?"
+    body.type           = entry.PlanetClass or entry.StarType or entry.event or ""
+    body.distance       = format_distance(entry.DistanceFromArrivalLS)
+    body.distance_num   = (type(entry.DistanceFromArrivalLS) == "number")
+        and entry.DistanceFromArrivalLS or body.distance_num
+    body.time           = short_time(entry.timestamp) ~= ""
+        and short_time(entry.timestamp) or body.time
+    body.kind           = detect_kind(entry, parent_kind)
+    body.parent_body_id = parent_id or body.parent_body_id
+    body.parent_kind    = parent_kind or body.parent_kind
+    body.scanned        = true
+end
+
 local function record_scan(plugin, entry)
     local body_id = entry.BodyID
     if body_id == nil then return end
     ensure_parent_chain(plugin, entry.Parents)
     ensure_body_stub(plugin, body_id)
-    local body = plugin._bodies[body_id]
-    body.name           = entry.BodyName or body.name or "?"
-    body.type           = entry.PlanetClass or entry.StarType or entry.event
-    body.distance       = format_distance(entry.DistanceFromArrivalLS)
-    body.time           = entry.timestamp or body.time
-    body.parent_body_id = extract_parent_body_id(entry.Parents)
-        or body.parent_body_id
-    body.scanned        = true
-end
-
-local function display_name(body)
-    if body and body.name and body.name ~= "" then return body.name end
-    return UNNAMED_BODY_PLACEHOLDER
-end
-
-local function row_for_body(body, indented_name)
-    return {
-        ["Time"]          = (body and body.time) or "",
-        ["Body"]          = indented_name or display_name(body),
-        ["Type"]          = (body and body.type) or "",
-        ["Distance (Ls)"] = (body and body.distance) or "",
-    }
-end
-
-local function flat_rows(bodies)
-    local rows = {}
-    for _, body in pairs(bodies) do
-        if body.scanned then table.insert(rows, row_for_body(body)) end
-    end
-    table.sort(rows, function(a, b) return a.Time < b.Time end)
-    return rows
-end
-
-local function visible_seed_ids(bodies)
-    local seeds = {}
-    for id, body in pairs(bodies) do
-        if body.scanned then table.insert(seeds, id) end
-    end
-    return seeds
-end
-
-local function hierarchical_rows(bodies)
-    local rows = {}
-    hierarchy.walk({
-        seed_ids = visible_seed_ids(bodies),
-        parent_for = function(id)
-            local body = bodies[id]
-            return body and body.parent_body_id
-        end,
-        sort_ids = function(ids)
-            table.sort(ids, function(a, b)
-                local ta = (bodies[a] and bodies[a].time) or ""
-                local tb = (bodies[b] and bodies[b].time) or ""
-                if ta == tb then return a < b end
-                return ta < tb
-            end)
-        end,
-        visit = function(id, depth)
-            local body = bodies[id]
-            local raw_name = display_name(body)
-            local row = row_for_body(body, hierarchy.indent_prefix(depth) .. raw_name)
-            row._depth = depth
-            row._node_id = "body_" .. tostring(id)
-            row._raw = { Body = raw_name }
-            table.insert(rows, row)
-        end,
-    })
-    return rows
-end
-
-local function rebuild_grid(plugin)
-    if plugin.group_by_body then
-        plugin.grid.rows = hierarchical_rows(plugin._bodies)
-    else
-        plugin.grid.rows = flat_rows(plugin._bodies)
-    end
+    local parent_id, parent_kind = extract_parent_info(entry.Parents)
+    update_body_from_scan(plugin._bodies[body_id], entry, parent_id, parent_kind)
 end
 
 local function reset_bodies(plugin)
     plugin._bodies = {}
-    rebuild_grid(plugin)
 end
 
 local function notify_landable(plugin, entry)
@@ -165,7 +135,6 @@ end
 
 local function on_scan(plugin, entry)
     record_scan(plugin, entry)
-    rebuild_grid(plugin)
     notify_landable(plugin, entry)
 end
 
@@ -179,12 +148,14 @@ local function on_fsd_jump(plugin, entry)
 end
 
 local EVENT_HANDLERS = {
-    Scan    = on_scan,
-    FSDJump = on_fsd_jump,
+    Scan           = on_scan,
+    ScanBaryCentre = on_scan,
+    FSDJump        = on_fsd_jump,
 }
 
 function Plugin:load(core)
     core_ref = core
+    ensure_settings(self)
 end
 
 function Plugin:journal_event(entry)
@@ -197,9 +168,12 @@ end
 function Plugin:status_change(_)
 end
 
-function Plugin:set_grouping(is_enabled)
-    self.group_by_body = is_enabled and true or false
-    rebuild_grid(self)
+function Plugin:draw_view(view_state, x, y, w, h)
+    return tree_view.draw(view_state, x, y, w, h, self._bodies)
+end
+
+function Plugin:row_count_label()
+    return string.format("%d BODIES", tree_view.row_count(self._bodies))
 end
 
 return Plugin
