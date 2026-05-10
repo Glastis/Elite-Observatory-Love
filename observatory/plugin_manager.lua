@@ -17,13 +17,13 @@ local Core = require("observatory.core")
 local settings = require("observatory.settings")
 local log_monitor = require("observatory.log_monitor")
 local paths = require("observatory.paths")
+local error_channel = require("observatory.error_channel")
 
 local plugin_manager = {}
 
-local plugins = {}            -- ordered list of loaded plugin tables
-local cores_by_id = {}        -- plugin_id => Core instance
-local errors = {}             -- list of { plugin, message }
-local disabled = {}           -- plugin_id => true
+local plugins = {}
+local cores_by_id = {}
+local disabled = {}
 
 local function plugin_storage_folder(plugin_id)
     -- Use love.filesystem.getSaveDirectory() so storage is per-user, then
@@ -58,13 +58,10 @@ local function method_call(obj, method_name, ...)
     if type(obj) ~= "table" then return true end
     local fn = obj[method_name]
     if type(fn) ~= "function" then return true end
-    -- pcall passes varargs natively; no need to repack via unpack.
     local ok, err = pcall(fn, obj, ...)
     if not ok then
-        table.insert(errors, {
-            plugin = obj.id or obj.name or "?",
-            message = string.format("%s: %s", method_name, tostring(err)),
-        })
+        error_channel.report(obj.id or obj.name or "?",
+            string.format("%s: %s", method_name, tostring(err)))
     end
     return ok, err
 end
@@ -83,7 +80,7 @@ end
 function plugin_manager.load_all()
     plugins = {}
     cores_by_id = {}
-    errors = {}
+    error_channel.clear()
     disabled = {}
 
     -- Wipe any listeners we registered on a previous load so we don't dispatch
@@ -95,9 +92,9 @@ function plugin_manager.load_all()
         local mod_path = "plugins." .. id
         local ok, plugin = pcall(require, mod_path)
         if not ok then
-            table.insert(errors, { plugin = id, message = tostring(plugin) })
+            error_channel.report(id, tostring(plugin))
         elseif type(plugin) ~= "table" then
-            table.insert(errors, { plugin = id, message = "plugin did not return a table" })
+            error_channel.report(id, "plugin did not return a table")
         else
             plugin.id = plugin.id or id
             plugin.name = plugin.name or id
@@ -170,7 +167,7 @@ function plugin_manager.list_enabled()
     return result
 end
 
-function plugin_manager.errors() return errors end
+function plugin_manager.errors() return error_channel.get_all() end
 
 function plugin_manager.set_enabled(plugin_id, enabled)
     if enabled then

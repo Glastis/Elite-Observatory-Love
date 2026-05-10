@@ -2,6 +2,7 @@ local constants = require("plugins.bioinsights.constants")
 local handlers = require("plugins.bioinsights.handlers")
 local card_view = require("plugins.bioinsights.card_view")
 local state = require("plugins.bioinsights.state")
+local settings_helpers = require("observatory.plugin_helpers.settings")
 
 local SORT_MODE_CYCLE = {
     body  = "price",
@@ -26,13 +27,6 @@ local Plugin = {
 
 local core_ref
 
-local function ensure_settings(plugin)
-    plugin.settings = plugin.settings or {}
-    for key, value in pairs(plugin.default_settings) do
-        if plugin.settings[key] == nil then plugin.settings[key] = value end
-    end
-end
-
 local function sync_state_context()
     state.set_user_context({
         near_nebula   = Plugin.near_nebula,
@@ -52,7 +46,7 @@ end
 
 function Plugin:load(core)
     core_ref = core
-    ensure_settings(self)
+    settings_helpers.apply_defaults(self)
     if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
     handlers.set_notifier(send_notification)
     sync_state_context()

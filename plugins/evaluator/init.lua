@@ -1,6 +1,7 @@
 local constants = require("plugins.evaluator.constants")
 local handlers = require("plugins.evaluator.handlers")
 local card_view = require("plugins.evaluator.card_view")
+local settings_helpers = require("observatory.plugin_helpers.settings")
 
 local SORT_MODE_CYCLE = {
     body  = "price",
@@ -31,13 +32,6 @@ local Plugin = {
 
 local core_ref
 
-local function ensure_settings(plugin)
-    plugin.settings = plugin.settings or {}
-    for key, value in pairs(plugin.default_settings) do
-        if plugin.settings[key] == nil then plugin.settings[key] = value end
-    end
-end
-
 local function send_notification(args)
     if not core_ref then return end
     core_ref:send_notification(args)
@@ -45,7 +39,7 @@ end
 
 function Plugin:load(core)
     core_ref = core
-    ensure_settings(self)
+    settings_helpers.apply_defaults(self)
     if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
     handlers.set_notifier(send_notification)
 end

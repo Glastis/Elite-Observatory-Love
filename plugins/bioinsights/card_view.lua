@@ -1,7 +1,7 @@
 local theme            = require("observatory.ui.theme")
-local input            = require("observatory.ui.input")
 local text             = require("observatory.ui.text")
-local panel            = require("observatory.ui.panel")
+local card_view        = require("observatory.ui.card_view")
+local format           = require("observatory.plugin_helpers.format")
 local plugin_state     = require("plugins.bioinsights.state")
 local species_values   = require("plugins.bioinsights.species_values")
 local variants         = require("plugins.bioinsights.variants")
@@ -28,21 +28,18 @@ local SCAN_DOT_RADIUS     = 3
 local SCAN_DOT_GAP        = 4
 local SCAN_DOTS_WIDTH     = SCAN_DOTS_TOTAL * SCAN_DOT_RADIUS * 2
                             + (SCAN_DOTS_TOTAL - 1) * SCAN_DOT_GAP
-local SCROLLBAR_RESERVE   = 6
-local SCROLLBAR_W         = 3
-local WHEEL_STEP_PX       = 40
 local SPECIES_VARIANT_GAP = 8
 local SUB_PARTS_SEP       = "  -  "
 local MIN_CARD_W          = 300
 local MAX_COLUMNS         = 4
 
-local FONT_TITLE          = { family = "main_medium", size = 14 }
-local FONT_BODY_VALUE     = { family = "mono",        size = 11 }
-local FONT_SUB            = { family = "mono",        size = 10 }
-local FONT_SAMPLE_DIST    = { family = "mono_medium", size = 10 }
-local FONT_GENUS          = { family = "mono_medium", size = 11 }
-local FONT_SPECIES        = { family = "mono",        size = 11 }
-local FONT_META           = { family = "mono",        size = 10 }
+local FONT_TITLE       = { family = "main_medium", size = 14 }
+local FONT_BODY_VALUE  = { family = "mono",        size = 11 }
+local FONT_SUB         = { family = "mono",        size = 10 }
+local FONT_SAMPLE_DIST = { family = "mono_medium", size = 10 }
+local FONT_GENUS       = { family = "mono_medium", size = 11 }
+local FONT_SPECIES     = { family = "mono",        size = 11 }
+local FONT_META        = { family = "mono",        size = 10 }
 
 local HIGH_VALUE_BOLD_THRESHOLD = 2 * 1000000
 
@@ -51,14 +48,19 @@ local STATUS_PREDICTED = "predicted"
 local STATUS_PENDING   = "pending"
 local STATUS_EXCLUDED  = "excluded"
 
+local FORMAT_SCALES = {
+    { threshold = constants.VALUE_MILLION,  divider = constants.VALUE_MILLION,  format = constants.VALUE_MILLION_FORMAT },
+    { threshold = constants.VALUE_THOUSAND, divider = constants.VALUE_THOUSAND, format = constants.VALUE_THOUSAND_FORMAT },
+}
+
 local function draw_check_icon(x, y, size)
     local s = size - STATUS_BADGE_INSET * 2
     local ox = x + STATUS_BADGE_INSET
     local oy = y + STATUS_BADGE_INSET
     love.graphics.line(
-        ox,             oy + s * 0.55,
-        ox + s * 0.38,  oy + s * 0.92,
-        ox + s,         oy + s * 0.18
+        ox,            oy + s * 0.55,
+        ox + s * 0.38, oy + s * 0.92,
+        ox + s,        oy + s * 0.18
     )
 end
 
@@ -127,29 +129,18 @@ local function font_for(spec)
     return theme.font(spec.family, spec.size)
 end
 
-local function format_thousand_million(value)
-    if value >= constants.VALUE_MILLION then
-        return string.format(constants.VALUE_MILLION_FORMAT,
-            value / constants.VALUE_MILLION)
-    end
-    return string.format(constants.VALUE_THOUSAND_FORMAT,
-        value / constants.VALUE_THOUSAND)
-end
-
 local function format_number(value)
     if not value or value <= 0 then return constants.UNKNOWN_TEXT end
-    return format_thousand_million(value)
+    return format.compact_number(value, FORMAT_SCALES, constants.UNKNOWN_TEXT)
 end
 
 local function format_value_str(value)
     if not value or value <= 0 then return constants.UNKNOWN_TEXT end
-    return string.format(constants.VALUE_FORMAT, format_thousand_million(value))
+    return string.format(constants.VALUE_FORMAT, format_number(value))
 end
 
 local function format_distance(distance_ls)
-    if not distance_ls or distance_ls <= 0 then
-        return constants.UNKNOWN_TEXT
-    end
+    if not distance_ls or distance_ls <= 0 then return constants.UNKNOWN_TEXT end
     return string.format(constants.DISTANCE_FORMAT, distance_ls)
 end
 
@@ -171,7 +162,7 @@ local function build_sample_distance_text(info)
     if not info then return nil end
     local required = sample_distances.for_genus(info.genus_label)
     return {
-        text       = string.format("%s: %s",
+        text = string.format("%s: %s",
             constants.SAMPLE_DISTANCE_LABEL,
             format_sample_distance_pair(info.distance_m, required)),
         is_reached = required ~= nil and info.distance_m >= required,
@@ -201,9 +192,7 @@ end
 
 local function should_skip_body(body, settings, hide_scanned)
     if not body then return true end
-    if body.biological_count <= 0 and #body.genus_order == 0 then
-        return true
-    end
+    if body.biological_count <= 0 and #body.genus_order == 0 then return true end
     if hide_scanned and is_body_fully_scanned(body) then return true end
     if not settings or not settings.only_show_high_value then return false end
     if #body.genus_order == 0 then return false end
@@ -284,29 +273,11 @@ local function build_genus_block(body, genus_label)
     }
 end
 
-local function strip_system_prefix(body_name, system_name)
-    if not system_name or system_name == "" then return body_name end
-    if body_name:sub(1, #system_name) ~= system_name then return body_name end
-    local last_word = system_name:match("(%S+)%s*$")
-    if not last_word then return body_name end
-    local keep_from = #system_name - #last_word + 1
-    local rest = body_name:sub(keep_from)
-    if rest == "" then return body_name end
-    return rest
-end
-
-local function raw_body_name(body)
-    if body.name and body.name ~= "" and body.name ~= "?" then
-        return body.name
-    end
-    return nil
-end
-
 local function display_body_name(body, system_name, hide_system)
-    local name = raw_body_name(body)
+    local name = format.display_name(body, nil)
     if not name then return constants.UNNAMED_BODY_PLACEHOLDER end
     if not hide_system then return name end
-    return strip_system_prefix(name, system_name)
+    return format.strip_system_prefix(name, system_name)
 end
 
 local function star_label(body)
@@ -317,9 +288,7 @@ local function star_label(body)
 end
 
 local function body_type_label(body)
-    if body.body_type and body.body_type ~= "" then
-        return body.body_type
-    end
+    if body.body_type and body.body_type ~= "" then return body.body_type end
     return constants.UNKNOWN_TEXT
 end
 
@@ -337,18 +306,18 @@ end
 local function build_card(body, system_name, hide_system)
     local sample_info = plugin_state.last_sample_info_for_body_name(body.name)
     local card = {
-        body                 = body,
-        system_name          = system_name,
-        title                = display_body_name(body, system_name, hide_system),
-        body_type            = body_type_label(body),
-        star                 = star_label(body),
-        distance             = format_distance(body.distance_ls),
-        body_value           = format_body_value(body),
-        bios                 = bios_label(body),
-        sample_distance      = build_sample_distance_text(sample_info),
-        genuses              = {},
-        unmapped_count       = 0,
-        sort_value           = body_sort_value(body),
+        body            = body,
+        system_name     = system_name,
+        title           = display_body_name(body, system_name, hide_system),
+        body_type       = body_type_label(body),
+        star            = star_label(body),
+        distance        = format_distance(body.distance_ls),
+        body_value      = format_body_value(body),
+        bios            = bios_label(body),
+        sample_distance = build_sample_distance_text(sample_info),
+        genuses         = {},
+        unmapped_count  = 0,
+        sort_value      = body_sort_value(body),
     }
     if #body.genus_order == 0 then
         card.unmapped_count = body.biological_count or 0
@@ -374,11 +343,7 @@ local function compare_by_price(a, b)
     return compare_by_body(a, b)
 end
 
-local SORT_COMPARATORS = {
-    body  = compare_by_body,
-    price = compare_by_price,
-}
-
+local SORT_COMPARATORS = { body = compare_by_body, price = compare_by_price }
 local DEFAULT_SORT_MODE = "body"
 
 local function comparator_for(sort_mode)
@@ -434,9 +399,7 @@ local function draw_card_title(card, x, y, w)
     local rw = text.width(card.body_value, value_font, 0.1)
     local title_w = math.max(0, w - rw - 12)
     local fitted = text.truncate_right(card.title, title_font, title_w, 0)
-    text.draw(fitted, x, y, {
-        font = title_font, color = theme.colors.text,
-    })
+    text.draw(fitted, x, y, { font = title_font, color = theme.colors.text })
     text.draw(card.body_value, x + w - rw, y + 2, {
         font = value_font, color = theme.colors.accent, letter_em = 0.1,
     })
@@ -476,9 +439,7 @@ local function draw_right_scans(payload, x, y, w)
     draw_scan_dots(payload.scans, x + w - SCAN_DOTS_WIDTH, dot_y)
 end
 
-local GENUS_RIGHT_RENDERERS = {
-    scans = draw_right_scans,
-}
+local GENUS_RIGHT_RENDERERS = { scans = draw_right_scans }
 
 local function draw_genus_header(block, x, y, w)
     local genus_font = font_for(FONT_GENUS)
@@ -499,12 +460,12 @@ end
 
 local function draw_species_badge(sp, x, y)
     local species_font = font_for(FONT_SPECIES)
-    local badge = STATUS_BADGE[sp.status] or STATUS_BADGE[STATUS_PENDING]
+    local badge_def = STATUS_BADGE[sp.status] or STATUS_BADGE[STATUS_PENDING]
     local icon_y = y + math.floor((species_font:getHeight() - STATUS_BADGE_SIZE) / 2)
     local prev_w = love.graphics.getLineWidth()
-    love.graphics.setLineWidth(badge.line_w)
-    love.graphics.setColor(theme.colors[badge.color_key])
-    badge.draw(x, icon_y, STATUS_BADGE_SIZE)
+    love.graphics.setLineWidth(badge_def.line_w)
+    love.graphics.setColor(theme.colors[badge_def.color_key])
+    badge_def.draw(x, icon_y, STATUS_BADGE_SIZE)
     love.graphics.setLineWidth(prev_w)
 end
 
@@ -577,18 +538,9 @@ local function draw_card_body(card, x, y, w)
     end
 end
 
-local function draw_card_panel(x, y, w, h)
-    panel.draw(x, y, w, h, {
-        bg = theme.colors.panel,
-        border = theme.colors.rule,
-        left_accent = theme.colors.accent_rule,
-        left_accent_w = 2,
-    })
-end
-
 local function draw_card(card, x, y, w, h)
     h = h or card_height(card)
-    draw_card_panel(x, y, w, h)
+    card_view.draw_card_panel(x, y, w, h)
     local inner_x = x + CARD_PAD_X
     local inner_w = w - CARD_PAD_X * 2
     local cy = y + CARD_PAD_Y
@@ -606,91 +558,6 @@ local function draw_card(card, x, y, w, h)
     return h
 end
 
-local function column_count_for(available_w)
-    local n = math.floor(available_w / MIN_CARD_W)
-    if n < 1 then return 1 end
-    if n > MAX_COLUMNS then return MAX_COLUMNS end
-    return n
-end
-
-local function card_width_for(available_w, columns)
-    local total_gap = (columns - 1) * CARD_GAP
-    return math.floor((available_w - total_gap) / columns)
-end
-
-local function build_grid_layout(cards, available_w)
-    local columns = column_count_for(available_w)
-    local card_w = card_width_for(available_w, columns)
-    local rows = {}
-    local current = { cards = {}, height = 0 }
-    for _, card in ipairs(cards) do
-        if #current.cards >= columns then
-            table.insert(rows, current)
-            current = { cards = {}, height = 0 }
-        end
-        local h = card_height(card)
-        table.insert(current.cards, card)
-        if h > current.height then current.height = h end
-    end
-    if #current.cards > 0 then table.insert(rows, current) end
-    return { rows = rows, columns = columns, card_w = card_w }
-end
-
-local function compute_content_height(layout)
-    local total = 0
-    for i, row in ipairs(layout.rows) do
-        if i > 1 then total = total + CARD_GAP end
-        total = total + row.height
-    end
-    return total
-end
-
-local function clamp_scroll(view_state, content_h, view_h)
-    local max_scroll = math.max(0, content_h - view_h)
-    view_state.max_scroll = max_scroll
-    if view_state.scroll > max_scroll then view_state.scroll = max_scroll end
-    if view_state.scroll < 0 then view_state.scroll = 0 end
-    return max_scroll
-end
-
-local function handle_wheel(view_state, x, y, w, h)
-    if not input.in_rect(x, y, w, h) then return end
-    if input.wheel_dy == 0 then return end
-    view_state.scroll = view_state.scroll - input.wheel_dy * WHEEL_STEP_PX
-end
-
-local function draw_scrollbar(view_state, max_scroll, x, y, w, h, content_h)
-    if max_scroll <= 0 then return end
-    local bar_h = math.max(20, h * (h / content_h))
-    local bar_y = y + (h - bar_h) * (view_state.scroll / max_scroll)
-    love.graphics.setColor(theme.colors.rule_strong)
-    love.graphics.rectangle("fill",
-        x + w - SCROLLBAR_W - 1, bar_y, SCROLLBAR_W, bar_h)
-end
-
-local function draw_empty_state(x, y, w, h)
-    local font = font_for(FONT_SPECIES)
-    text.draw("(no biology data)", x, y + h / 2 - font:getHeight() / 2, {
-        font = font, color = theme.colors.text_faint,
-        align = "center", width = w, letter_em = 0.06,
-    })
-end
-
-local function draw_grid(layout, view_state, x, y, w, h)
-    love.graphics.setScissor(x, y, w, h)
-    local cy = y - view_state.scroll
-    for _, row in ipairs(layout.rows) do
-        if cy + row.height >= y and cy <= y + h then
-            for i, card in ipairs(row.cards) do
-                local card_x = x + (i - 1) * (layout.card_w + CARD_GAP)
-                draw_card(card, card_x, cy, layout.card_w, row.height)
-            end
-        end
-        cy = cy + row.height + CARD_GAP
-    end
-    love.graphics.setScissor()
-end
-
 function CARD_VIEW.card_count(settings, hide_scanned)
     local count = 0
     local system = plugin_state.current_system()
@@ -704,20 +571,18 @@ function CARD_VIEW.card_count(settings, hide_scanned)
 end
 
 function CARD_VIEW.draw(view_state, x, y, w, h, settings, hide_system, sort_mode, hide_scanned)
-    view_state = view_state or {}
-    view_state.scroll = view_state.scroll or 0
-    handle_wheel(view_state, x, y, w, h)
-    local cards = build_cards(settings, hide_system, sort_mode, hide_scanned)
-    if #cards == 0 then
-        draw_empty_state(x, y, w, h)
-        return view_state
-    end
-    local layout = build_grid_layout(cards, w - SCROLLBAR_RESERVE)
-    local content_h = compute_content_height(layout)
-    local max_scroll = clamp_scroll(view_state, content_h, h)
-    draw_grid(layout, view_state, x, y, w - SCROLLBAR_RESERVE, h)
-    draw_scrollbar(view_state, max_scroll, x, y, w, h, content_h)
-    return view_state
+    return card_view.draw(view_state, x, y, w, h, {
+        gap = CARD_GAP,
+        min_card_w = MIN_CARD_W,
+        max_columns = MAX_COLUMNS,
+        empty_message = "(no biology data)",
+        empty_font = font_for(FONT_SPECIES),
+        build_cards = function()
+            return build_cards(settings, hide_system, sort_mode, hide_scanned)
+        end,
+        card_height = card_height,
+        draw_card = draw_card,
+    })
 end
 
 return CARD_VIEW

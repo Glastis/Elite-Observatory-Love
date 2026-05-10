@@ -56,6 +56,7 @@ function M.draw(state, value, x, y, opts)
         x + pad + knob_d / 2 + kx_off,
         y + pad + knob_d / 2,
         knob_d / 2)
+    return nil, state
 end
 
 return M

@@ -1,6 +1,7 @@
 local state = require("plugins.evaluator.state")
 local body_value = require("plugins.evaluator.body_value")
 local constants = require("plugins.evaluator.constants")
+local journal_helpers = require("observatory.plugin_helpers.journal")
 
 local handlers = {}
 
@@ -12,11 +13,6 @@ function handlers.set_on_change(fn) on_change = fn or on_change end
 
 local function is_terraformable(entry)
     return entry.TerraformState ~= nil and entry.TerraformState ~= ""
-end
-
-local function gravity_in_g(surface_gravity_ms2)
-    if not surface_gravity_ms2 then return 0 end
-    return surface_gravity_ms2 / constants.GRAVITY_DIVIDER
 end
 
 local function distance_threshold(body, settings)
@@ -50,27 +46,8 @@ local function maybe_notify(body, settings)
     body.notified_high_value = true
 end
 
-local NULL_PARENT_KIND = "Null"
-
-local function extract_parent_body_id(parents)
-    if type(parents) ~= "table" then return nil end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then return body_id end
-        end
-    end
-    return nil
-end
-
 local function ensure_parent_chain(system_address, parents)
-    if type(parents) ~= "table" then return end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then
-                state.ensure_body(system_address, body_id, nil)
-            end
-        end
-    end
+    journal_helpers.ensure_parent_chain(state.ensure_body, system_address, parents)
 end
 
 local function on_location_like(entry)
@@ -93,7 +70,7 @@ local function on_scan(entry, settings)
     body.atmosphere     = entry.Atmosphere or ""
     body.was_discovered = entry.WasDiscovered == true
     body.was_mapped     = entry.WasMapped == true
-    body.parent_body_id = extract_parent_body_id(entry.Parents)
+    body.parent_body_id = journal_helpers.extract_parent_body_id(entry.Parents)
         or body.parent_body_id
     body.scanned        = true
     body_value.compute(body)
@@ -118,12 +95,9 @@ local DISPATCH_TABLE = {
     SAASignalsFound   = on_saa_signals_found,
 }
 
-function handlers.dispatch(entry, settings)
-    if not entry or not entry.event then return end
-    local handler = DISPATCH_TABLE[entry.event]
-    if not handler then return end
-    handler(entry, settings)
-    on_change()
-end
+handlers.dispatch = journal_helpers.create_dispatcher({
+    handlers = DISPATCH_TABLE,
+    on_change = function() on_change() end,
+})
 
 return handlers

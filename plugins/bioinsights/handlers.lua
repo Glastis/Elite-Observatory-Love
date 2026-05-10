@@ -1,6 +1,7 @@
 local state = require("plugins.bioinsights.state")
 local constants = require("plugins.bioinsights.constants")
 local species_values = require("plugins.bioinsights.species_values")
+local journal_helpers = require("observatory.plugin_helpers.journal")
 
 local handlers = {}
 
@@ -29,46 +30,26 @@ local function register_genuses(body, genuses)
     end
 end
 
-local NULL_PARENT_KIND = "Null"
-
-local function extract_parent_body_id(parents)
-    if type(parents) ~= "table" then return nil end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then return body_id end
-        end
-    end
-    return nil
-end
-
 local function ensure_parent_chain(system_address, parents)
-    if type(parents) ~= "table" then return end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then
-                state.ensure_body(system_address, body_id, nil)
-            end
-        end
-    end
+    journal_helpers.ensure_parent_chain(state.ensure_body, system_address, parents)
 end
 
 local function on_location_like(entry)
     state.set_current_system(entry.SystemAddress, entry.StarSystem)
 end
 
+local PARENT_KIND_STAR = "Star"
+
 local function inherit_parent_star_type(system_address, body, parents)
-    if type(parents) ~= "table" then return end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind == "Star" then
-                local star_body = state.ensure_body(system_address, body_id, nil)
-                if star_body and star_body.parent_star_type ~= "" then
-                    body.parent_star_type = star_body.parent_star_type
-                    return
-                end
-            end
+    local star_type
+    journal_helpers.for_each_parent(parents, function(kind, body_id)
+        if star_type or kind ~= PARENT_KIND_STAR then return end
+        local star_body = state.ensure_body(system_address, body_id, nil)
+        if star_body and star_body.parent_star_type ~= "" then
+            star_type = star_body.parent_star_type
         end
-    end
+    end)
+    if star_type then body.parent_star_type = star_type end
 end
 
 local function collect_materials(material_list)
@@ -99,7 +80,7 @@ local function on_scan(entry)
     if not entry.StarType then
         inherit_parent_star_type(entry.SystemAddress, body, entry.Parents)
     end
-    body.parent_body_id   = extract_parent_body_id(entry.Parents)
+    body.parent_body_id   = journal_helpers.extract_parent_body_id(entry.Parents)
         or body.parent_body_id
     state.refresh_genus_constraints(body)
     state.populate_candidate_genuses(body)
@@ -178,13 +159,10 @@ local DISPATCH_TABLE = {
     CodexEntry        = on_codex_entry,
 }
 
-function handlers.dispatch(entry, settings)
-    if not entry or not entry.event then return end
-    local handler = DISPATCH_TABLE[entry.event]
-    if not handler then return end
-    handler(entry, settings)
-    on_change()
-end
+handlers.dispatch = journal_helpers.create_dispatcher({
+    handlers = DISPATCH_TABLE,
+    on_change = function() on_change() end,
+})
 
 function handlers.handle_status(status)
     state.set_current_status(status)

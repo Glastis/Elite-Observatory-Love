@@ -29,6 +29,10 @@ local DEFAULTS = {
     CombinedViewLeft    = "",
     CombinedViewRight   = "",
     CombinedViewSplit   = "vertical",
+    LogPollIntervalRealtimeS = 0.25,
+    LogPollIntervalAltS      = 1.0,
+    LogDirCacheTtlS          = 5.0,
+    LogBatchLinesPerTick     = 4000,
 }
 
 local SAVE_FILE = "observatory.config"
@@ -73,12 +77,42 @@ function settings.save()
     love.filesystem.write(SAVE_FILE, encoded)
 end
 
+local listeners_by_key = {}
+
+function settings.on_change(key, fn)
+    listeners_by_key[key] = listeners_by_key[key] or {}
+    table.insert(listeners_by_key[key], fn)
+end
+
+function settings.off_change(key, fn)
+    local list = listeners_by_key[key]
+    if not list then return end
+    for i, listener in ipairs(list) do
+        if listener == fn then
+            table.remove(list, i)
+            return
+        end
+    end
+end
+
+local function notify_change(key, new_value, old_value)
+    local list = listeners_by_key[key]
+    if not list then return end
+    for _, fn in ipairs(list) do
+        local ok, err = pcall(fn, new_value, old_value, key)
+        if not ok then print("[settings] listener error:", err) end
+    end
+end
+
 function settings.get(key)
     return settings.values[key]
 end
 
 function settings.set(key, value)
+    local old = settings.values[key]
     settings.values[key] = value
+    if old == value then return end
+    notify_change(key, value, old)
 end
 
 function settings.defaults()

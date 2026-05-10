@@ -1,11 +1,14 @@
 local tree_view = require("plugins.example.tree_view")
 local body_value = require("observatory.body_value")
+local journal_helpers = require("observatory.plugin_helpers.journal")
+local format_helpers = require("observatory.plugin_helpers.format")
+local settings_helpers = require("observatory.plugin_helpers.settings")
 
-local NULL_PARENT_KIND        = "Null"
 local NOTIFY_TITLE_LANDABLE   = "Landable Body"
 local NOTIFY_TITLE_FSD_JUMP   = "FSD Jump"
 local NOTIFY_DEFAULT_SYSTEM   = "Unknown system"
 local DISTANCE_FORMAT         = "%.1f"
+local DISTANCE_SUFFIX         = " Ls"
 local DEFAULT_KIND            = "other"
 
 local PARENT_KIND_TO_KIND = {
@@ -31,36 +34,10 @@ local Plugin = {
 
 local core_ref
 
-local function ensure_settings(plugin)
-    plugin.settings = plugin.settings or {}
-    for key, value in pairs(plugin.default_settings) do
-        if plugin.settings[key] == nil then plugin.settings[key] = value end
-    end
-end
-
-local function group_thousands(int_str)
-    local sign, digits = int_str:match("^(%-?)(%d+)$")
-    if not digits then return int_str end
-    local grouped = digits:reverse():gsub("(%d%d%d)", "%1 "):reverse()
-    return sign .. (grouped:gsub("^%s+", ""))
-end
-
 local function format_distance(distance_ls)
     if type(distance_ls) ~= "number" then return "" end
     local formatted = string.format(DISTANCE_FORMAT, distance_ls)
-    local int_part, rest = formatted:match("^(%-?%d+)(.*)$")
-    if not int_part then return formatted .. " Ls" end
-    return group_thousands(int_part) .. rest .. " Ls"
-end
-
-local function extract_parent_info(parents)
-    if type(parents) ~= "table" then return nil, nil end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then return body_id, kind end
-        end
-    end
-    return nil, nil
+    return format_helpers.group_thousands_in_formatted(formatted) .. DISTANCE_SUFFIX
 end
 
 local function detect_kind(entry, parent_kind)
@@ -99,12 +76,9 @@ local function ensure_body_stub(plugin, body_id)
 end
 
 local function ensure_parent_chain(plugin, parents)
-    if type(parents) ~= "table" then return end
-    for _, parent in ipairs(parents) do
-        for kind, body_id in pairs(parent) do
-            if kind ~= NULL_PARENT_KIND then ensure_body_stub(plugin, body_id) end
-        end
-    end
+    journal_helpers.ensure_parent_chain(
+        function(_, body_id) ensure_body_stub(plugin, body_id) end,
+        nil, parents)
 end
 
 local function is_terraformable(entry)
@@ -135,7 +109,7 @@ local function record_scan(plugin, entry)
     if body_id == nil then return end
     ensure_parent_chain(plugin, entry.Parents)
     ensure_body_stub(plugin, body_id)
-    local parent_id, parent_kind = extract_parent_info(entry.Parents)
+    local parent_id, parent_kind = journal_helpers.extract_parent(entry.Parents)
     update_body_from_scan(plugin._bodies[body_id], entry, parent_id, parent_kind)
 end
 
@@ -176,7 +150,7 @@ local EVENT_HANDLERS = {
 
 function Plugin:load(core)
     core_ref = core
-    ensure_settings(self)
+    settings_helpers.apply_defaults(self)
 end
 
 function Plugin:journal_event(entry)

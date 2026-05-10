@@ -311,7 +311,7 @@ function M.draw(state, items, x, y, opts)
         end)
     end
 
-    return layout.total_w, clicked, state, h
+    return clicked, state
 end
 
 return M
