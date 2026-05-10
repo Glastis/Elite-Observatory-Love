@@ -142,6 +142,12 @@ local function refine_genus_with_species(body, species_label, variant_label, sam
     state.confirm_species(body, genus_label, species_label, variant_label, sample_index)
 end
 
+local function genus_label_from_entry(entry, species_label)
+    local label = entry.Genus_Localised or entry.Genus
+    if label and label ~= "" then return label end
+    return species_label and species_label:match("^(%S+)") or nil
+end
+
 local function on_scan_organic(entry)
     local body = state.ensure_body(entry.SystemAddress, entry.Body)
     if not body then return end
@@ -149,7 +155,8 @@ local function on_scan_organic(entry)
     local species_label = entry.Species_Localised or entry.Species
     local variant_label = entry.Variant_Localised or entry.Variant
     refine_genus_with_species(body, species_label, variant_label, sample_index)
-    state.record_sample_at_current_position()
+    state.record_sample_at_current_position(
+        genus_label_from_entry(entry, species_label))
 end
 
 local function on_codex_entry(entry, settings)

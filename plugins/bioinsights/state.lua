@@ -298,7 +298,7 @@ function state.set_current_status(status)
     last_status = status
 end
 
-function state.record_sample_at_current_position()
+function state.record_sample_at_current_position(genus_label)
     if not last_status then return end
     local body_name = last_status.BodyName
     local lat = last_status.Latitude
@@ -310,20 +310,24 @@ function state.record_sample_at_current_position()
         latitude      = lat,
         longitude     = lon,
         planet_radius = radius_m,
+        genus_label   = genus_label,
     }
 end
 
-function state.last_sample_distance_for_body_name(body_name)
+function state.last_sample_info_for_body_name(body_name)
     if not last_status or not last_sample_position then return nil end
     if last_sample_position.body_name ~= body_name then return nil end
     if last_status.BodyName ~= body_name then return nil end
     local lat = last_status.Latitude
     local lon = last_status.Longitude
     if not lat or not lon then return nil end
-    return haversine_meters(
-        last_sample_position.latitude, last_sample_position.longitude,
-        lat, lon, last_sample_position.planet_radius
-    )
+    return {
+        distance_m  = haversine_meters(
+            last_sample_position.latitude, last_sample_position.longitude,
+            lat, lon, last_sample_position.planet_radius
+        ),
+        genus_label = last_sample_position.genus_label,
+    }
 end
 
 function state.reset()

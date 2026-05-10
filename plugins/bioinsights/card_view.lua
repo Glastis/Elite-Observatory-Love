@@ -1,12 +1,13 @@
-local theme           = require("observatory.ui.theme")
-local input           = require("observatory.ui.input")
-local text            = require("observatory.ui.text")
-local panel           = require("observatory.ui.panel")
-local plugin_state    = require("plugins.bioinsights.state")
-local species_values  = require("plugins.bioinsights.species_values")
-local variants        = require("plugins.bioinsights.variants")
-local body_value      = require("plugins.bioinsights.body_value")
-local constants       = require("plugins.bioinsights.constants")
+local theme            = require("observatory.ui.theme")
+local input            = require("observatory.ui.input")
+local text             = require("observatory.ui.text")
+local panel            = require("observatory.ui.panel")
+local plugin_state     = require("plugins.bioinsights.state")
+local species_values   = require("plugins.bioinsights.species_values")
+local variants         = require("plugins.bioinsights.variants")
+local body_value       = require("plugins.bioinsights.body_value")
+local sample_distances = require("plugins.bioinsights.sample_distances")
+local constants        = require("plugins.bioinsights.constants")
 
 local CARD_GAP            = 12
 local CARD_PAD_X          = 14
@@ -159,11 +160,22 @@ local function format_sample_distance_value(meters)
     return string.format(constants.SAMPLE_DISTANCE_METER_FMT, meters)
 end
 
-local function format_sample_distance_text(meters)
-    if not meters then return nil end
-    return string.format("%s: %s",
-        constants.SAMPLE_DISTANCE_LABEL,
-        format_sample_distance_value(meters))
+local function format_sample_distance_pair(meters, required_meters)
+    local current = format_sample_distance_value(meters)
+    if not required_meters then return current end
+    return string.format(constants.SAMPLE_DISTANCE_PAIR_FMT,
+        current, format_sample_distance_value(required_meters))
+end
+
+local function build_sample_distance_text(info)
+    if not info then return nil end
+    local required = sample_distances.for_genus(info.genus_label)
+    return {
+        text       = string.format("%s: %s",
+            constants.SAMPLE_DISTANCE_LABEL,
+            format_sample_distance_pair(info.distance_m, required)),
+        is_reached = required ~= nil and info.distance_m >= required,
+    }
 end
 
 local function format_body_value(body)
@@ -323,7 +335,7 @@ local function body_sort_value(body)
 end
 
 local function build_card(body, system_name, hide_system)
-    local sample_meters = plugin_state.last_sample_distance_for_body_name(body.name)
+    local sample_info = plugin_state.last_sample_info_for_body_name(body.name)
     local card = {
         body                 = body,
         system_name          = system_name,
@@ -333,7 +345,7 @@ local function build_card(body, system_name, hide_system)
         distance             = format_distance(body.distance_ls),
         body_value           = format_body_value(body),
         bios                 = bios_label(body),
-        sample_distance_text = format_sample_distance_text(sample_meters),
+        sample_distance      = build_sample_distance_text(sample_info),
         genuses              = {},
         unmapped_count       = 0,
         sort_value           = body_sort_value(body),
@@ -402,7 +414,7 @@ local function genuses_height(card)
 end
 
 local function sample_distance_row_height(card)
-    if card.sample_distance_text then return CARD_SAMPLE_DIST_H end
+    if card.sample_distance then return CARD_SAMPLE_DIST_H end
     return 0
 end
 
@@ -443,12 +455,18 @@ local function draw_card_subheader(card, x, y, w)
     })
 end
 
+local SAMPLE_DISTANCE_COLOR_KEY = {
+    [true]  = "success",
+    [false] = "accent",
+}
+
 local function draw_sample_distance_row(card, x, y, w)
-    if not card.sample_distance_text then return end
+    if not card.sample_distance then return end
     local font = font_for(FONT_SAMPLE_DIST)
-    local fitted = text.truncate_right(card.sample_distance_text, font, w, 0.06)
+    local fitted = text.truncate_right(card.sample_distance.text, font, w, 0.06)
+    local color_key = SAMPLE_DISTANCE_COLOR_KEY[card.sample_distance.is_reached]
     text.draw(fitted, x, y, {
-        font = font, color = theme.colors.accent, letter_em = 0.06,
+        font = font, color = theme.colors[color_key], letter_em = 0.06,
     })
 end
 
@@ -578,7 +596,7 @@ local function draw_card(card, x, y, w, h)
     cy = cy + CARD_HEADER_H
     draw_card_subheader(card, inner_x, cy, inner_w)
     cy = cy + CARD_SUB_H
-    if card.sample_distance_text then
+    if card.sample_distance then
         draw_sample_distance_row(card, inner_x, cy, inner_w)
         cy = cy + CARD_SAMPLE_DIST_H
     end

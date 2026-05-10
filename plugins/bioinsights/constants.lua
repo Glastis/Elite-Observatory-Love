@@ -43,6 +43,7 @@ return {
     SAMPLE_DISTANCE_METER_FMT  = "%.0f m",
     SAMPLE_DISTANCE_KM_FMT     = "%.2f km",
     SAMPLE_DISTANCE_KM_THRESHOLD = 1000,
+    SAMPLE_DISTANCE_PAIR_FMT   = "%s / %s",
     VALUE_FORMAT               = "%s cr",
     VALUE_RANGE_FORMAT         = "%s - %s cr",
     VALUE_MILLION              = 1000000,
