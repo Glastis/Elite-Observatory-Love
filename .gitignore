@@ -3,5 +3,6 @@
 /not_versionable/
 /elite_journal/
 *.log
-core.*
+/core
+/core.[0-9]*
 tmp.png
