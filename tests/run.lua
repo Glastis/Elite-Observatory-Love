@@ -219,6 +219,19 @@ do
         "SAA does not flip the journal-derived was_mapped flag")
     truthy(body.worth_mapping ~= nil, "SAA re-evaluates worth_mapping")
 
+    evaluator_handlers.dispatch({
+        event = "Scan", SystemAddress = 1, BodyID = 3, BodyName = "Test A 3",
+        PlanetClass = "High metal content body", DistanceFromArrivalLS = 800,
+        WasDiscovered = false, WasMapped = false,
+    }, settings)
+    evaluator_handlers.dispatch({
+        event = "SAAScanComplete", SystemAddress = 1, BodyID = 3,
+        BodyName = "Test A 3", ProbesUsed = 4, EfficiencyTarget = 6,
+    }, settings)
+    local silent_mapped = evaluator_state.bodies_in_current_system()[3]
+    truthy(silent_mapped.mapped_by_player,
+        "SAAScanComplete marks signal-less body as mapped by the player")
+
     local prev_address = evaluator_state.current_system_address()
     evaluator_handlers.dispatch({event = "LoadGame"}, settings)
     eq(evaluator_state.current_system_address(), prev_address,

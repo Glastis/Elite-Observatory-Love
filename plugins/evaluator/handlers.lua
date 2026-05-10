@@ -78,7 +78,7 @@ local function on_scan(entry, settings)
     maybe_notify(body, settings)
 end
 
-local function on_saa_signals_found(entry, settings)
+local function on_saa_mapped(entry, settings)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
     if not body then return end
     body.mapped_by_player = true
@@ -92,7 +92,8 @@ local DISPATCH_TABLE = {
     Location          = on_location_like,
     FSDJump           = on_location_like,
     Scan              = on_scan,
-    SAASignalsFound   = on_saa_signals_found,
+    SAAScanComplete   = on_saa_mapped,
+    SAASignalsFound   = on_saa_mapped,
 }
 
 handlers.dispatch = journal_helpers.create_dispatcher({
