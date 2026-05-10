@@ -1,8 +1,9 @@
-local theme      = require("observatory.ui.theme")
-local input      = require("observatory.ui.input")
-local text       = require("observatory.ui.text")
-local icon       = require("observatory.ui.icon")
-local body_value = require("observatory.body_value")
+local theme       = require("observatory.ui.theme")
+local input       = require("observatory.ui.input")
+local text        = require("observatory.ui.text")
+local icon        = require("observatory.ui.icon")
+local body_value  = require("observatory.body_value")
+local body_colors = require("plugins.example.body_colors")
 
 local M = {}
 
@@ -85,6 +86,13 @@ end
 local function kind_color(kind, is_scanned)
     if not is_scanned then return theme.colors.text_faint end
     return theme.colors[KIND_COLOR_KEYS[kind] or "text"] or theme.colors.text
+end
+
+local function body_icon_color(body)
+    if not body or not body.scanned then return theme.colors.text_faint end
+    local typed = body_colors.lookup(body.body_type)
+    if typed then return typed end
+    return kind_color(body.kind or KIND_UNKNOWN, true)
 end
 
 local function kind_glyph(kind)
@@ -252,7 +260,7 @@ local function draw_kind_icon(row, x, y, h)
     local size = kind_size(kind)
     local glyph = kind_glyph(kind)
     local cx = rail_x(x, row.depth)
-    local color = kind_color(kind, body and body.scanned)
+    local color = body_icon_color(body)
     glyph(cx - size / 2, y + (h - size) / 2, size, color)
     return cx + size / 2
 end
