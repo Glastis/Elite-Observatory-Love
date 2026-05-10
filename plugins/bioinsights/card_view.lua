@@ -106,9 +106,9 @@ local STATUS_RANK = {
 local STATUS_FALLBACK_RANK = 9
 
 local SPECIES_LABEL_COLOR = {
-    [STATUS_CONFIRMED] = "text",
-    [STATUS_PREDICTED] = "text",
-    [STATUS_PENDING]   = "text_dim",
+    [STATUS_CONFIRMED] = "text_faint",
+    [STATUS_PREDICTED] = "text_faint",
+    [STATUS_PENDING]   = "text_faint",
 }
 
 local GENUS_RIGHT_LABEL = {
