@@ -2,7 +2,12 @@
 /.idea/
 /not_versionable/
 /elite_journal/
+/build/
+/dist/
 *.log
 /core
 /core.[0-9]*
 tmp.png
+*~
+.DS_Store
+Thumbs.db
