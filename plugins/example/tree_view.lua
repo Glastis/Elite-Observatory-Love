@@ -1,7 +1,8 @@
-local theme = require("observatory.ui.theme")
-local input = require("observatory.ui.input")
-local text  = require("observatory.ui.text")
-local icon  = require("observatory.ui.icon")
+local theme      = require("observatory.ui.theme")
+local input      = require("observatory.ui.input")
+local text       = require("observatory.ui.text")
+local icon       = require("observatory.ui.icon")
+local body_value = require("observatory.body_value")
 
 local M = {}
 
@@ -16,7 +17,10 @@ local TYPE_GAP            = 14
 local TIME_RESERVE        = 84
 local TIME_GAP            = 12
 local DISTANCE_RESERVE    = 110
+local DISTANCE_GAP        = 12
+local VALUE_RESERVE       = 90
 local SCROLLBAR_RESERVE   = 6
+local HIGH_VALUE_THRESHOLD = 2000000
 local SCROLLBAR_W         = 3
 local WHEEL_STEP_PX       = 40
 local UNNAMED_PLACEHOLDER = "(unscanned)"
@@ -240,10 +244,11 @@ local function draw_kind_icon(row, x, y, h)
 end
 
 local function build_text_columns(right_edge)
-    local distance_x = right_edge - DISTANCE_RESERVE
-    local time_x     = distance_x - TIME_GAP - TIME_RESERVE
-    local type_x     = time_x     - TYPE_GAP - TYPE_RESERVE
-    return type_x, time_x, distance_x
+    local value_x    = right_edge - VALUE_RESERVE
+    local distance_x = value_x    - DISTANCE_GAP - DISTANCE_RESERVE
+    local time_x     = distance_x - TIME_GAP     - TIME_RESERVE
+    local type_x     = time_x     - TYPE_GAP     - TYPE_RESERVE
+    return type_x, time_x, distance_x, value_x
 end
 
 local function draw_name(row, x, y, max_w, h)
@@ -264,7 +269,20 @@ local function draw_meta_cell(value, x, y, h, w, color, align)
     })
 end
 
-local function draw_row_meta(row, type_x, time_x, distance_x, y, h)
+local function value_text_for(body)
+    if not body or not body.scanned then return "" end
+    local value = body.is_star and body.current_value or body.potential_max
+    return body_value.format(value)
+end
+
+local function value_color_for(body)
+    if not body or not body.scanned then return theme.colors.text_faint end
+    local value = body.is_star and body.current_value or body.potential_max
+    if (value or 0) >= HIGH_VALUE_THRESHOLD then return theme.colors.accent end
+    return theme.colors.text
+end
+
+local function draw_row_meta(row, type_x, time_x, distance_x, value_x, y, h)
     local body = row.body
     local type_color = (body and body.scanned)
         and theme.colors.text_dim or theme.colors.text_faint
@@ -274,16 +292,18 @@ local function draw_row_meta(row, type_x, time_x, distance_x, y, h)
         theme.colors.text_faint, "left")
     draw_meta_cell(body and body.distance, distance_x, y, h, DISTANCE_RESERVE,
         theme.colors.text, "right")
+    draw_meta_cell(value_text_for(body), value_x, y, h, VALUE_RESERVE,
+        value_color_for(body), "right")
 end
 
 local function draw_row(row, x, y, w, h)
     draw_connectors(row, x, y, h)
     local icon_right = draw_kind_icon(row, x, y, h)
-    local type_x, time_x, distance_x = build_text_columns(x + w)
+    local type_x, time_x, distance_x, value_x = build_text_columns(x + w)
     local name_x = icon_right + ICON_TEXT_GAP
     local name_w = math.max(0, type_x - name_x - 8)
     draw_name(row, name_x, y, name_w, h)
-    draw_row_meta(row, type_x, time_x, distance_x, y, h)
+    draw_row_meta(row, type_x, time_x, distance_x, value_x, y, h)
 end
 
 local function clamp_scroll(view_state, content_h, view_h)

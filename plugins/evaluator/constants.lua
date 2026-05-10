@@ -1,3 +1,5 @@
+local body_value = require("observatory.body_value")
+
 return {
     GRID_COLUMNS = {
         "Body", "Type", "Distance (Ls)", "Gravity (g)",
@@ -13,11 +15,11 @@ return {
     GRAVITY_DIVIDER          = 9.80665,
     DISTANCE_FORMAT          = "%.0f",
     GRAVITY_FORMAT           = "%.2f",
-    VALUE_MILLION            = 1000000,
-    VALUE_THOUSAND           = 1000,
-    VALUE_MILLION_FORMAT     = "%.1fM",
-    VALUE_THOUSAND_FORMAT    = "%.1fK",
-    UNKNOWN_TEXT             = "-",
+    VALUE_MILLION            = body_value.VALUE_MILLION,
+    VALUE_THOUSAND           = body_value.VALUE_THOUSAND,
+    VALUE_MILLION_FORMAT     = body_value.VALUE_MILLION_FORMAT,
+    VALUE_THOUSAND_FORMAT    = body_value.VALUE_THOUSAND_FORMAT,
+    UNKNOWN_TEXT             = body_value.UNKNOWN_TEXT,
 
     TERRAFORM_LABEL_YES      = "Yes",
     TERRAFORM_LABEL_NO       = "-",
@@ -39,45 +41,25 @@ return {
         ["Ammonia world"]  = "max_distance_aw",
     },
 
-    PLANET_K_BY_TYPE = {
-        ["Metal rich body"]              = { k = 21790, kt = 65631 },
-        ["High metal content body"]      = { k = 9654,  kt = 100677 },
-        ["Earthlike body"]               = { k = 64831 + 116295, kt = 0 },
-        ["Water world"]                  = { k = 64831, kt = 116295 },
-        ["Ammonia world"]                = { k = 96932, kt = 0 },
-        ["Sudarsky class I gas giant"]   = { k = 1656,  kt = 0 },
-        ["Sudarsky class II gas giant"]  = { k = 9654,  kt = 100677 },
-        ["Sudarsky class III gas giant"] = { k = 1656,  kt = 0 },
-        ["Sudarsky class IV gas giant"]  = { k = 1656,  kt = 0 },
-        ["Sudarsky class V gas giant"]   = { k = 1656,  kt = 0 },
-    },
+    PLANET_K_BY_TYPE  = body_value.PLANET_K_BY_TYPE,
+    DEFAULT_PLANET_K  = body_value.DEFAULT_PLANET_K,
+    DEFAULT_PLANET_KT = body_value.DEFAULT_PLANET_KT,
 
-    DEFAULT_PLANET_K  = 300,
-    DEFAULT_PLANET_KT = 93328,
+    STAR_K_BY_TYPE = body_value.STAR_K_BY_TYPE,
+    DEFAULT_STAR_K = body_value.DEFAULT_STAR_K,
 
-    STAR_K_BY_TYPE = {
-        O = 1200, B = 1200, A = 1200, F = 1200, G = 1200,
-        K = 1200, M = 1200, L = 1200, T = 1200, Y = 1200,
-        TTS = 1200, AeBe = 1200,
-        DA = 14057, DB = 14057, DC = 14057, DO = 14057,
-        DQ = 14057, DX = 14057, DZ = 14057,
-        N = 22628, H = 22628,
-    },
+    MASS_FACTOR_NUMERATOR   = body_value.MASS_FACTOR_NUMERATOR,
+    MASS_FACTOR_DENOMINATOR = body_value.MASS_FACTOR_DENOMINATOR,
+    MASS_EXPONENT           = body_value.MASS_EXPONENT,
+    DEFAULT_MASS_EM         = body_value.DEFAULT_MASS_EM,
 
-    DEFAULT_STAR_K = 1200,
+    MAPPING_MULTIPLIER         = body_value.MAPPING_MULTIPLIER,
+    FIRST_MAPPER_MULTIPLIER    = body_value.FIRST_MAPPER_MULTIPLIER,
+    EFFICIENCY_MULTIPLIER      = body_value.EFFICIENCY_MULTIPLIER,
+    ODYSSEY_MAPPING_MULTIPLIER = body_value.ODYSSEY_MAPPING_MULTIPLIER,
+    FIRST_DISCOVERY_MULTIPLIER = body_value.FIRST_DISCOVERY_MULTIPLIER,
 
-    MASS_FACTOR_NUMERATOR   = 3,
-    MASS_FACTOR_DENOMINATOR = 5.3,
-    MASS_EXPONENT           = 0.199977,
-    DEFAULT_MASS_EM         = 1,
-
-    MAPPING_MULTIPLIER         = 3.333333333,
-    FIRST_MAPPER_MULTIPLIER    = 1.10967676,
-    EFFICIENCY_MULTIPLIER      = 1.25,
-    ODYSSEY_MAPPING_MULTIPLIER = 1.3,
-    FIRST_DISCOVERY_MULTIPLIER = 2.6,
-
-    MIN_BODY_VALUE = 500,
+    MIN_BODY_VALUE = body_value.MIN_BODY_VALUE,
 
     NOTIFY_TITLE_HIGH_VALUE = "High-value body",
     NOTIFY_TITLE_TERRAFORM  = "Terraformable",

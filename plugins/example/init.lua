@@ -1,4 +1,5 @@
 local tree_view = require("plugins.example.tree_view")
+local body_value = require("observatory.body_value")
 
 local NULL_PARENT_KIND        = "Null"
 local NOTIFY_TITLE_LANDABLE   = "Landable Body"
@@ -76,6 +77,14 @@ local function ensure_body_stub(plugin, body_id)
         body_id        = body_id,
         name           = nil,
         type           = "",
+        body_type      = "",
+        is_star        = false,
+        terraformable  = false,
+        mass_em        = 0,
+        was_discovered = false,
+        was_mapped     = false,
+        current_value  = 0,
+        potential_max  = 0,
         distance       = "",
         distance_num   = nil,
         time           = "",
@@ -95,9 +104,19 @@ local function ensure_parent_chain(plugin, parents)
     end
 end
 
+local function is_terraformable(entry)
+    return entry.TerraformState ~= nil and entry.TerraformState ~= ""
+end
+
 local function update_body_from_scan(body, entry, parent_id, parent_kind)
     body.name           = entry.BodyName or body.name or "?"
     body.type           = entry.PlanetClass or entry.StarType or entry.event or ""
+    body.body_type      = entry.PlanetClass or entry.StarType or body.body_type
+    body.is_star        = entry.StarType ~= nil
+    body.terraformable  = is_terraformable(entry)
+    body.mass_em        = entry.MassEM or body.mass_em
+    body.was_discovered = entry.WasDiscovered == true
+    body.was_mapped     = entry.WasMapped == true
     body.distance       = format_distance(entry.DistanceFromArrivalLS)
     body.distance_num   = (type(entry.DistanceFromArrivalLS) == "number")
         and entry.DistanceFromArrivalLS or body.distance_num
@@ -107,6 +126,7 @@ local function update_body_from_scan(body, entry, parent_id, parent_kind)
     body.parent_body_id = parent_id or body.parent_body_id
     body.parent_kind    = parent_kind or body.parent_kind
     body.scanned        = true
+    body_value.compute(body)
 end
 
 local function record_scan(plugin, entry)
