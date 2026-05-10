@@ -78,11 +78,17 @@ end
 local NULL_PARENT_KIND        = "Null"
 local BARYCENTRE_KIND_LABEL   = "barycentre"
 
+local function is_referenced_parent(kind, body_id)
+    if body_id == nil then return false end
+    if kind == NULL_PARENT_KIND then return body_id > 0 end
+    return true
+end
+
 local function pick_immediate_parent(parents)
     if type(parents) ~= "table" then return nil, nil end
     for _, parent in ipairs(parents) do
         for kind, body_id in pairs(parent) do
-            if body_id and body_id > 0 then
+            if is_referenced_parent(kind, body_id) then
                 return body_id, kind
             end
         end
@@ -90,15 +96,25 @@ local function pick_immediate_parent(parents)
     return nil, nil
 end
 
+local function link_inner_to_outer(plugin, inner_id, outer_id)
+    if not inner_id or not outer_id or inner_id == outer_id then return end
+    local inner_body = plugin._bodies[inner_id]
+    if not inner_body or inner_body.parent_body_id then return end
+    inner_body.parent_body_id = outer_id
+end
+
 local function ensure_immediate_chain(plugin, parents)
     if type(parents) ~= "table" then return end
+    local previous_id
     for _, parent in ipairs(parents) do
         for kind, body_id in pairs(parent) do
-            if body_id and body_id > 0 then
+            if is_referenced_parent(kind, body_id) then
                 ensure_body_stub(plugin, body_id)
                 if kind == NULL_PARENT_KIND then
                     plugin._bodies[body_id].kind = BARYCENTRE_KIND_LABEL
                 end
+                link_inner_to_outer(plugin, previous_id, body_id)
+                previous_id = body_id
             end
         end
     end
