@@ -329,11 +329,11 @@ end
 
 local function build_cards(settings, hide_system, sort_mode, hide_scanned)
     local list = {}
-    for _, item in ipairs(plugin_state.systems_sorted()) do
-        for _, body in pairs(item.system.bodies) do
-            if not should_skip_body(body, settings, hide_scanned) then
-                table.insert(list, build_card(body, item.system.name, hide_system))
-            end
+    local system = plugin_state.current_system()
+    if not system then return list end
+    for _, body in pairs(system.bodies) do
+        if not should_skip_body(body, settings, hide_scanned) then
+            table.insert(list, build_card(body, system.name, hide_system))
         end
     end
     table.sort(list, comparator_for(sort_mode))
@@ -573,11 +573,11 @@ end
 
 function CARD_VIEW.card_count(settings, hide_scanned)
     local count = 0
-    for _, item in ipairs(plugin_state.systems_sorted()) do
-        for _, body in pairs(item.system.bodies) do
-            if not should_skip_body(body, settings, hide_scanned) then
-                count = count + 1
-            end
+    local system = plugin_state.current_system()
+    if not system then return count end
+    for _, body in pairs(system.bodies) do
+        if not should_skip_body(body, settings, hide_scanned) then
+            count = count + 1
         end
     end
     return count
