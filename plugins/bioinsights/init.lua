@@ -62,7 +62,8 @@ function Plugin:journal_event(entry)
     handlers.dispatch(entry, self.settings)
 end
 
-function Plugin:status_change(_)
+function Plugin:status_change(status)
+    handlers.handle_status(status)
 end
 
 function Plugin:set_near_nebula(is_enabled)

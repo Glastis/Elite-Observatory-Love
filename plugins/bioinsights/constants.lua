@@ -39,6 +39,10 @@ return {
 
     HIGH_VALUE_THRESHOLD       = 5000000,
     DISTANCE_FORMAT            = "%.0f Ls",
+    SAMPLE_DISTANCE_LABEL      = "Last sample",
+    SAMPLE_DISTANCE_METER_FMT  = "%.0f m",
+    SAMPLE_DISTANCE_KM_FMT     = "%.2f km",
+    SAMPLE_DISTANCE_KM_THRESHOLD = 1000,
     VALUE_FORMAT               = "%s cr",
     VALUE_RANGE_FORMAT         = "%s - %s cr",
     VALUE_MILLION              = 1000000,

@@ -13,6 +13,24 @@ local user_context = {
     near_guardian = false,
 }
 
+local last_status = nil
+local last_sample_position = nil
+
+local function clamp_unit(value)
+    if value > 1 then return 1 end
+    if value < -1 then return -1 end
+    return value
+end
+
+local function haversine_meters(lat1, lon1, lat2, lon2, radius_m)
+    local r1 = math.rad(lat1)
+    local r2 = math.rad(lat2)
+    local dlon = math.rad(lon2 - lon1)
+    local cos_central = math.sin(r1) * math.sin(r2)
+        + math.cos(r1) * math.cos(r2) * math.cos(dlon)
+    return radius_m * math.acos(clamp_unit(cos_central))
+end
+
 function state.set_user_context(ctx)
     ctx = ctx or {}
     user_context = {
@@ -276,9 +294,43 @@ function state.systems_sorted()
     return list
 end
 
+function state.set_current_status(status)
+    last_status = status
+end
+
+function state.record_sample_at_current_position()
+    if not last_status then return end
+    local body_name = last_status.BodyName
+    local lat = last_status.Latitude
+    local lon = last_status.Longitude
+    local radius_m = last_status.PlanetRadius
+    if not body_name or not lat or not lon or not radius_m then return end
+    last_sample_position = {
+        body_name     = body_name,
+        latitude      = lat,
+        longitude     = lon,
+        planet_radius = radius_m,
+    }
+end
+
+function state.last_sample_distance_for_body_name(body_name)
+    if not last_status or not last_sample_position then return nil end
+    if last_sample_position.body_name ~= body_name then return nil end
+    if last_status.BodyName ~= body_name then return nil end
+    local lat = last_status.Latitude
+    local lon = last_status.Longitude
+    if not lat or not lon then return nil end
+    return haversine_meters(
+        last_sample_position.latitude, last_sample_position.longitude,
+        lat, lon, last_sample_position.planet_radius
+    )
+end
+
 function state.reset()
     data.systems = {}
     data.current_system_address = nil
+    last_status = nil
+    last_sample_position = nil
 end
 
 return state

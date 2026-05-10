@@ -149,6 +149,7 @@ local function on_scan_organic(entry)
     local species_label = entry.Species_Localised or entry.Species
     local variant_label = entry.Variant_Localised or entry.Variant
     refine_genus_with_species(body, species_label, variant_label, sample_index)
+    state.record_sample_at_current_position()
 end
 
 local function on_codex_entry(entry, settings)
@@ -175,6 +176,11 @@ function handlers.dispatch(entry, settings)
     local handler = DISPATCH_TABLE[entry.event]
     if not handler then return end
     handler(entry, settings)
+    on_change()
+end
+
+function handlers.handle_status(status)
+    state.set_current_status(status)
     on_change()
 end
 

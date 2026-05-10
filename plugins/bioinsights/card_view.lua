@@ -12,6 +12,7 @@ local CARD_PAD_X          = 14
 local CARD_PAD_Y          = 12
 local CARD_HEADER_H       = 22
 local CARD_SUB_H          = 18
+local CARD_SAMPLE_DIST_H  = 16
 local CARD_INTERNAL_GAP   = 10
 local GENUS_HEADER_H      = 22
 local SPECIES_ROW_H       = 22
@@ -36,6 +37,7 @@ local MAX_COLUMNS         = 4
 local FONT_TITLE          = { family = "main_medium", size = 14 }
 local FONT_BODY_VALUE     = { family = "mono",        size = 11 }
 local FONT_SUB            = { family = "mono",        size = 10 }
+local FONT_SAMPLE_DIST    = { family = "mono_medium", size = 10 }
 local FONT_GENUS          = { family = "mono_medium", size = 11 }
 local FONT_SPECIES        = { family = "mono",        size = 11 }
 local FONT_META           = { family = "mono",        size = 10 }
@@ -147,6 +149,20 @@ local function format_distance(distance_ls)
         return constants.UNKNOWN_TEXT
     end
     return string.format(constants.DISTANCE_FORMAT, distance_ls)
+end
+
+local function format_sample_distance_value(meters)
+    if meters >= constants.SAMPLE_DISTANCE_KM_THRESHOLD then
+        return string.format(constants.SAMPLE_DISTANCE_KM_FMT, meters / 1000)
+    end
+    return string.format(constants.SAMPLE_DISTANCE_METER_FMT, meters)
+end
+
+local function format_sample_distance_text(meters)
+    if not meters then return nil end
+    return string.format("%s: %s",
+        constants.SAMPLE_DISTANCE_LABEL,
+        format_sample_distance_value(meters))
 end
 
 local function genus_value_bounds(body, genus_label)
@@ -361,18 +377,20 @@ local function body_sort_value(body)
 end
 
 local function build_card(body, system_name, hide_system)
+    local sample_meters = plugin_state.last_sample_distance_for_body_name(body.name)
     local card = {
-        body           = body,
-        system_name    = system_name,
-        title          = display_body_name(body, system_name, hide_system),
-        body_type      = body_type_label(body),
-        star           = star_label(body),
-        distance       = format_distance(body.distance_ls),
-        body_value     = format_body_value(body),
-        bios           = bios_label(body),
-        genuses        = {},
-        unmapped_count = 0,
-        sort_value     = body_sort_value(body),
+        body                 = body,
+        system_name          = system_name,
+        title                = display_body_name(body, system_name, hide_system),
+        body_type            = body_type_label(body),
+        star                 = star_label(body),
+        distance             = format_distance(body.distance_ls),
+        body_value           = format_body_value(body),
+        bios                 = bios_label(body),
+        sample_distance_text = format_sample_distance_text(sample_meters),
+        genuses              = {},
+        unmapped_count       = 0,
+        sort_value           = body_sort_value(body),
     }
     if #body.genus_order == 0 then
         card.unmapped_count = body.biological_count or 0
@@ -437,8 +455,14 @@ local function genuses_height(card)
     return total
 end
 
+local function sample_distance_row_height(card)
+    if card.sample_distance_text then return CARD_SAMPLE_DIST_H end
+    return 0
+end
+
 local function card_height(card)
     local h = CARD_PAD_Y * 2 + CARD_HEADER_H + CARD_SUB_H
+        + sample_distance_row_height(card)
     if card.unmapped_count > 0 and #card.genuses == 0 then
         return h + CARD_INTERNAL_GAP + GENUS_HEADER_H
     end
@@ -470,6 +494,15 @@ local function draw_card_subheader(card, x, y, w)
     local fitted = text.truncate_right(joined, sub_font, w, 0.06)
     text.draw(fitted, x, y, {
         font = sub_font, color = theme.colors.text_dim, letter_em = 0.06,
+    })
+end
+
+local function draw_sample_distance_row(card, x, y, w)
+    if not card.sample_distance_text then return end
+    local font = font_for(FONT_SAMPLE_DIST)
+    local fitted = text.truncate_right(card.sample_distance_text, font, w, 0.06)
+    text.draw(fitted, x, y, {
+        font = font, color = theme.colors.accent, letter_em = 0.06,
     })
 end
 
@@ -599,6 +632,10 @@ local function draw_card(card, x, y, w, h)
     cy = cy + CARD_HEADER_H
     draw_card_subheader(card, inner_x, cy, inner_w)
     cy = cy + CARD_SUB_H
+    if card.sample_distance_text then
+        draw_sample_distance_row(card, inner_x, cy, inner_w)
+        cy = cy + CARD_SAMPLE_DIST_H
+    end
     if card.unmapped_count == 0 and #card.genuses == 0 then return h end
     cy = cy + CARD_INTERNAL_GAP
     draw_card_body(card, inner_x, cy, inner_w)
