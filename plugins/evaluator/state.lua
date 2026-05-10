@@ -22,6 +22,7 @@ local function blank_body()
         atmosphere            = "",
         was_discovered        = false,
         was_mapped            = false,
+        mapped_by_player      = false,
         was_footfalled        = false,
         current_value         = 0,
         potential_max         = 0,

@@ -44,6 +44,20 @@ local KIND_PREMIUM   = "premium"
 local KIND_BONUS     = "bonus"
 local KIND_INFO      = "info"
 
+local FOOTER_MAP_FOR        = "Map for +%s"
+local FOOTER_MAPPED_BY_YOU  = "Mapped by you"
+local FOOTER_MAPPED_BY_OTHER = "Mapped by another commander"
+local FOOTER_STAR_VALUE     = "Star value: %s"
+
+local BADGE_LABEL_FIRST_DISCOVERY = "FIRST DISCOVERY"
+local BADGE_LABEL_FIRST_MAPPING   = "FIRST MAPPING"
+local BADGE_LABEL_MAPPED_BY_YOU   = "MAPPED BY YOU"
+local BADGE_LABEL_MAPPED_BY_OTHER = "MAPPED BY ANOTHER"
+
+local function is_currently_mapped(body)
+    return body.was_mapped or body.mapped_by_player
+end
+
 local BADGE_STYLES = {
     [KIND_PREMIUM] = {
         text_color   = "bg",
@@ -164,14 +178,30 @@ local BADGE_BUILDERS = {
     },
     {
         active = function(body) return not body.was_discovered end,
-        build  = function() return { label = "FIRST DISCOVERY", kind = KIND_BONUS } end,
+        build  = function() return { label = BADGE_LABEL_FIRST_DISCOVERY, kind = KIND_BONUS } end,
     },
     {
-        active = function(body) return not body.was_mapped and not body.is_star end,
-        build  = function() return { label = "FIRST MAPPING", kind = KIND_BONUS } end,
+        active = function(body)
+            return not body.is_star
+                and not body.was_mapped
+                and not body.mapped_by_player
+        end,
+        build  = function() return { label = BADGE_LABEL_FIRST_MAPPING, kind = KIND_BONUS } end,
     },
     {
-        active = function(body) return body.worth_mapping end,
+        active = function(body) return body.mapped_by_player end,
+        build  = function() return { label = BADGE_LABEL_MAPPED_BY_YOU, kind = KIND_BONUS } end,
+    },
+    {
+        active = function(body)
+            return body.was_mapped
+                and not body.mapped_by_player
+                and not body.is_star
+        end,
+        build  = function() return { label = BADGE_LABEL_MAPPED_BY_OTHER, kind = KIND_INFO } end,
+    },
+    {
+        active = function(body) return body.worth_mapping and not is_currently_mapped(body) end,
         build  = function() return { label = "WORTH MAPPING", kind = KIND_PREMIUM } end,
     },
     {
@@ -231,7 +261,7 @@ local FOOTER_BUILDERS = {
     {
         active = function(body)
             if body.is_star then return false end
-            if body.was_mapped then return false end
+            if is_currently_mapped(body) then return false end
             if not body.worth_mapping then return false end
             local delta = (body.potential_max or 0) - (body.current_value or 0)
             return delta > 0
@@ -239,20 +269,28 @@ local FOOTER_BUILDERS = {
         build = function(body)
             local delta = (body.potential_max or 0) - (body.current_value or 0)
             return {
-                label     = string.format("Map for +%s", format_value_str(delta)),
+                label     = string.format(FOOTER_MAP_FOR, format_value_str(delta)),
                 color_key = "accent",
             }
         end,
     },
     {
-        active = function(body) return body.was_mapped and not body.is_star end,
-        build  = function() return { label = "Already mapped", color_key = "text_dim" } end,
+        active = function(body) return body.mapped_by_player and not body.is_star end,
+        build  = function() return { label = FOOTER_MAPPED_BY_YOU, color_key = "success" } end,
+    },
+    {
+        active = function(body)
+            return body.was_mapped
+                and not body.mapped_by_player
+                and not body.is_star
+        end,
+        build  = function() return { label = FOOTER_MAPPED_BY_OTHER, color_key = "text_dim" } end,
     },
     {
         active = function(body) return body.is_star end,
         build  = function(body)
             return {
-                label     = string.format("Star value: %s",
+                label     = string.format(FOOTER_STAR_VALUE,
                     format_value_str(body.current_value)),
                 color_key = "text_dim",
             }
@@ -293,7 +331,7 @@ end
 
 local function should_skip_body(body, settings, hide_scanned)
     if not body or not body.scanned then return true end
-    if hide_scanned and body.was_mapped then return true end
+    if hide_scanned and is_currently_mapped(body) then return true end
     if settings and settings.minimum_body_value
         and (body.potential_max or 0) < settings.minimum_body_value then
         return true

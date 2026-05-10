@@ -214,7 +214,9 @@ do
     eq(#notified, 1, "SAASignalsFound does not re-notify when already notified")
 
     local body = evaluator_state.bodies_in_current_system()[2]
-    truthy(body.was_mapped, "SAA marks body as mapped")
+    truthy(body.mapped_by_player, "SAA marks body as mapped by the player")
+    truthy(not body.was_mapped,
+        "SAA does not flip the journal-derived was_mapped flag")
     truthy(body.worth_mapping ~= nil, "SAA re-evaluates worth_mapping")
 
     local prev_address = evaluator_state.current_system_address()

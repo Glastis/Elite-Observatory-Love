@@ -104,7 +104,7 @@ end
 local function on_saa_signals_found(entry, settings)
     local body = state.ensure_body(entry.SystemAddress, entry.BodyID, entry.BodyName)
     if not body then return end
-    body.was_mapped = true
+    body.mapped_by_player = true
     body_value.compute(body)
     if not body.scanned then return end
     evaluate_mapping(body, settings)
