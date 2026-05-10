@@ -38,9 +38,19 @@ local function ensure_settings(plugin)
     end
 end
 
+local function group_thousands(int_str)
+    local sign, digits = int_str:match("^(%-?)(%d+)$")
+    if not digits then return int_str end
+    local grouped = digits:reverse():gsub("(%d%d%d)", "%1 "):reverse()
+    return sign .. (grouped:gsub("^%s+", ""))
+end
+
 local function format_distance(distance_ls)
     if type(distance_ls) ~= "number" then return "" end
-    return string.format(DISTANCE_FORMAT, distance_ls) .. " Ls"
+    local formatted = string.format(DISTANCE_FORMAT, distance_ls)
+    local int_part, rest = formatted:match("^(%-?%d+)(.*)$")
+    if not int_part then return formatted .. " Ls" end
+    return group_thousands(int_part) .. rest .. " Ls"
 end
 
 local function extract_parent_info(parents)
