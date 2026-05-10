@@ -226,8 +226,13 @@ local function process_genus_file(in_path)
 end
 
 local function main(args)
-    local in_dir = args[1] or "../tmp_info_prediction"
+    local in_dir = args[1]
     local out_path = args[2] or "plugins/bioinsights/codex/wiki_variants.lua"
+    if not in_dir or in_dir == "" then
+        io.stderr:write(
+            "usage: love . --script tools/parse_wiki.lua <wiki_html_dir> [out_path]\n")
+        os.exit(1)
+    end
     local p = io.popen("ls " .. in_dir .. "/*.html")
     if not p then print("ls failed") return end
     local all = {}

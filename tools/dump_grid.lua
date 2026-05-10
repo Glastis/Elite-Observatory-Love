@@ -1,5 +1,10 @@
 local args = arg or {}
-local journal_path = args[1] or "/tmp/ed-journal-bio"
+local journal_path = args[1]
+
+if not journal_path or journal_path == "" then
+    io.stderr:write("usage: love . --script tools/dump_grid.lua <journal_dir>\n")
+    os.exit(1)
+end
 
 local settings        = require("observatory.settings")
 local log_monitor     = require("observatory.log_monitor")

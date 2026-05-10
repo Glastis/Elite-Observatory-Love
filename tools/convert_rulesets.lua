@@ -265,8 +265,13 @@ local function convert_file(in_path, out_path)
 end
 
 local function main(args)
-    local in_dir = args[1] or "../EDMC-BioScan/src/bio_scan/bio_data/rulesets"
+    local in_dir = args[1]
     local out_dir = args[2] or "plugins/bioinsights/codex"
+    if not in_dir or in_dir == "" then
+        io.stderr:write(
+            "usage: love . --script tools/convert_rulesets.lua <ruleset_dir> [out_dir]\n")
+        os.exit(1)
+    end
     os.execute(string.format("mkdir -p %q", out_dir))
     local p = io.popen("ls " .. in_dir .. "/*.py")
     if not p then print("ls failed") return end
