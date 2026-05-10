@@ -6,7 +6,6 @@ local NOTIFY_TITLE_LANDABLE   = "Landable Body"
 local NOTIFY_TITLE_FSD_JUMP   = "FSD Jump"
 local NOTIFY_DEFAULT_SYSTEM   = "Unknown system"
 local DISTANCE_FORMAT         = "%.1f"
-local TIME_PATTERN            = "T(%d%d:%d%d:%d%d)"
 local DEFAULT_KIND            = "other"
 
 local PARENT_KIND_TO_KIND = {
@@ -42,11 +41,6 @@ end
 local function format_distance(distance_ls)
     if type(distance_ls) ~= "number" then return "" end
     return string.format(DISTANCE_FORMAT, distance_ls) .. " Ls"
-end
-
-local function short_time(timestamp)
-    if type(timestamp) ~= "string" then return "" end
-    return timestamp:match(TIME_PATTERN) or ""
 end
 
 local function extract_parent_info(parents)
@@ -87,7 +81,6 @@ local function ensure_body_stub(plugin, body_id)
         potential_max  = 0,
         distance       = "",
         distance_num   = nil,
-        time           = "",
         kind           = "unknown",
         parent_body_id = nil,
         parent_kind    = nil,
@@ -120,8 +113,6 @@ local function update_body_from_scan(body, entry, parent_id, parent_kind)
     body.distance       = format_distance(entry.DistanceFromArrivalLS)
     body.distance_num   = (type(entry.DistanceFromArrivalLS) == "number")
         and entry.DistanceFromArrivalLS or body.distance_num
-    body.time           = short_time(entry.timestamp) ~= ""
-        and short_time(entry.timestamp) or body.time
     body.kind           = detect_kind(entry, parent_kind)
     body.parent_body_id = parent_id or body.parent_body_id
     body.parent_kind    = parent_kind or body.parent_kind

@@ -14,13 +14,22 @@ local CONNECTOR_GAP       = 4
 local ICON_TEXT_GAP       = 10
 local TYPE_RESERVE        = 220
 local TYPE_GAP            = 14
-local TIME_RESERVE        = 84
-local TIME_GAP            = 12
+local STATUS_RESERVE      = 80
+local STATUS_GAP          = 12
 local DISTANCE_RESERVE    = 110
 local DISTANCE_GAP        = 12
 local VALUE_RESERVE       = 90
 local SCROLLBAR_RESERVE   = 6
 local HIGH_VALUE_THRESHOLD = 2000000
+
+local STATUS_LABEL_FIRST     = "FIRST"
+local STATUS_LABEL_FIRST_MAP = "1ST MAP"
+local STATUS_LABEL_MAPPED    = "MAPPED"
+local STATUS_LABEL_DISC      = "DISC"
+
+local STATUS_COLOR_KEY_NEW  = "accent"
+local STATUS_COLOR_KEY_HALF = "success"
+local STATUS_COLOR_KEY_DONE = "text_dim"
 local SCROLLBAR_W         = 3
 local WHEEL_STEP_PX       = 40
 local UNNAMED_PLACEHOLDER = "(unscanned)"
@@ -246,9 +255,9 @@ end
 local function build_text_columns(right_edge)
     local value_x    = right_edge - VALUE_RESERVE
     local distance_x = value_x    - DISTANCE_GAP - DISTANCE_RESERVE
-    local time_x     = distance_x - TIME_GAP     - TIME_RESERVE
-    local type_x     = time_x     - TYPE_GAP     - TYPE_RESERVE
-    return type_x, time_x, distance_x, value_x
+    local status_x   = distance_x - STATUS_GAP   - STATUS_RESERVE
+    local type_x     = status_x   - TYPE_GAP     - TYPE_RESERVE
+    return type_x, status_x, distance_x, value_x
 end
 
 local function draw_name(row, x, y, max_w, h)
@@ -269,6 +278,45 @@ local function draw_meta_cell(value, x, y, h, w, color, align)
     })
 end
 
+local STATUS_RULES = {
+    {
+        active = function(body) return not body.was_discovered end,
+        label = STATUS_LABEL_FIRST, color_key = STATUS_COLOR_KEY_NEW,
+    },
+    {
+        active = function(body) return body.is_star end,
+        label = STATUS_LABEL_DISC, color_key = STATUS_COLOR_KEY_DONE,
+    },
+    {
+        active = function(body) return not body.was_mapped end,
+        label = STATUS_LABEL_FIRST_MAP, color_key = STATUS_COLOR_KEY_HALF,
+    },
+    {
+        active = function(_) return true end,
+        label = STATUS_LABEL_MAPPED, color_key = STATUS_COLOR_KEY_DONE,
+    },
+}
+
+local function pick_status(body)
+    if not body or not body.scanned then return nil end
+    for _, rule in ipairs(STATUS_RULES) do
+        if rule.active(body) then return rule end
+    end
+    return nil
+end
+
+local function status_text_for(body)
+    local rule = pick_status(body)
+    if not rule then return "" end
+    return rule.label
+end
+
+local function status_color_for(body)
+    local rule = pick_status(body)
+    if not rule then return theme.colors.text_faint end
+    return theme.colors[rule.color_key] or theme.colors.text
+end
+
 local function value_text_for(body)
     if not body or not body.scanned then return "" end
     local value = body.is_star and body.current_value or body.potential_max
@@ -282,14 +330,14 @@ local function value_color_for(body)
     return theme.colors.text
 end
 
-local function draw_row_meta(row, type_x, time_x, distance_x, value_x, y, h)
+local function draw_row_meta(row, type_x, status_x, distance_x, value_x, y, h)
     local body = row.body
     local type_color = (body and body.scanned)
         and theme.colors.text_dim or theme.colors.text_faint
     draw_meta_cell(body and body.type, type_x, y, h, TYPE_RESERVE,
         type_color, "left")
-    draw_meta_cell(body and body.time, time_x, y, h, TIME_RESERVE,
-        theme.colors.text_faint, "left")
+    draw_meta_cell(status_text_for(body), status_x, y, h, STATUS_RESERVE,
+        status_color_for(body), "left")
     draw_meta_cell(body and body.distance, distance_x, y, h, DISTANCE_RESERVE,
         theme.colors.text, "right")
     draw_meta_cell(value_text_for(body), value_x, y, h, VALUE_RESERVE,
@@ -299,11 +347,11 @@ end
 local function draw_row(row, x, y, w, h)
     draw_connectors(row, x, y, h)
     local icon_right = draw_kind_icon(row, x, y, h)
-    local type_x, time_x, distance_x, value_x = build_text_columns(x + w)
+    local type_x, status_x, distance_x, value_x = build_text_columns(x + w)
     local name_x = icon_right + ICON_TEXT_GAP
     local name_w = math.max(0, type_x - name_x - 8)
     draw_name(row, name_x, y, name_w, h)
-    draw_row_meta(row, type_x, time_x, distance_x, value_x, y, h)
+    draw_row_meta(row, type_x, status_x, distance_x, value_x, y, h)
 end
 
 local function clamp_scroll(view_state, content_h, view_h)
