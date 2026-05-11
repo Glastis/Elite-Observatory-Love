@@ -7,6 +7,7 @@ cd "$PROJECT_ROOT"
 LOVE_VERSION="${LOVE_VERSION:-11.5}"
 APP_ID="EliteObservatory"
 APP_NAME="Elite Observatory"
+APP_VERSION="${APP_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 
 BUILD_DIR="$PROJECT_ROOT/build"
 CACHE_DIR="$BUILD_DIR/cache"
@@ -22,8 +23,8 @@ LOVE_APPIMAGE="$CACHE_DIR/love-${LOVE_VERSION}-x86_64.AppImage"
 APPIMAGETOOL="$CACHE_DIR/appimagetool-x86_64.AppImage"
 
 LOVE_FILE="$DIST_DIR/${APP_ID}.love"
-WIN_ZIP="$DIST_DIR/${APP_ID}-${LOVE_VERSION}-win64.zip"
-APPIMAGE_OUT="$DIST_DIR/${APP_ID}-${LOVE_VERSION}-x86_64.AppImage"
+WIN_ZIP="$DIST_DIR/${APP_ID}-${APP_VERSION}-win64.zip"
+APPIMAGE_OUT="$DIST_DIR/${APP_ID}-${APP_VERSION}-x86_64.AppImage"
 
 LOVE_SOURCES=(
     main.lua
