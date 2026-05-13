@@ -10,6 +10,12 @@ local SORT_MODE_CYCLE = {
 
 local DEFAULT_SORT_MODE = "price"
 
+local PERSISTENT_STATE_DEFAULTS = {
+    is_system_hidden  = false,
+    is_scanned_hidden = true,
+    sort_mode         = DEFAULT_SORT_MODE,
+}
+
 local Plugin = {
     id = "evaluator",
     name = "Observatory Evaluator",
@@ -40,7 +46,7 @@ end
 function Plugin:load(core)
     core_ref = core
     settings_helpers.apply_defaults(self)
-    if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
+    core:bind_state(self, PERSISTENT_STATE_DEFAULTS)
     handlers.set_notifier(send_notification)
 end
 
@@ -53,15 +59,18 @@ end
 
 function Plugin:set_system_hidden(is_enabled)
     self.is_system_hidden = is_enabled and true or false
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:set_scanned_hidden(is_enabled)
     self.is_scanned_hidden = is_enabled and true or false
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:cycle_sort_mode()
     local current = self.sort_mode or DEFAULT_SORT_MODE
     self.sort_mode = SORT_MODE_CYCLE[current] or DEFAULT_SORT_MODE
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:draw_view(view_state, x, y, w, h)

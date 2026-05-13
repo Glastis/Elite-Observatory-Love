@@ -11,6 +11,14 @@ local SORT_MODE_CYCLE = {
 
 local DEFAULT_SORT_MODE = "body"
 
+local PERSISTENT_STATE_DEFAULTS = {
+    is_system_hidden  = false,
+    is_scanned_hidden = true,
+    sort_mode         = DEFAULT_SORT_MODE,
+    near_nebula       = false,
+    near_guardian     = false,
+}
+
 local Plugin = {
     id = "bioinsights",
     name = "Observatory Bio Insights",
@@ -47,7 +55,7 @@ end
 function Plugin:load(core)
     core_ref = core
     settings_helpers.apply_defaults(self)
-    if self.is_scanned_hidden == nil then self.is_scanned_hidden = true end
+    core:bind_state(self, PERSISTENT_STATE_DEFAULTS)
     handlers.set_notifier(send_notification)
     sync_state_context()
 end
@@ -63,24 +71,29 @@ end
 function Plugin:set_near_nebula(is_enabled)
     self.near_nebula = is_enabled and true or false
     apply_user_context_change()
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:set_near_guardian(is_enabled)
     self.near_guardian = is_enabled and true or false
     apply_user_context_change()
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:set_system_hidden(is_enabled)
     self.is_system_hidden = is_enabled and true or false
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:set_scanned_hidden(is_enabled)
     self.is_scanned_hidden = is_enabled and true or false
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:cycle_sort_mode()
     local current = self.sort_mode or DEFAULT_SORT_MODE
     self.sort_mode = SORT_MODE_CYCLE[current] or DEFAULT_SORT_MODE
+    if core_ref then core_ref:save_state() end
 end
 
 function Plugin:draw_view(view_state, x, y, w, h)

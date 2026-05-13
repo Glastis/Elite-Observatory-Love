@@ -26,6 +26,7 @@ local DEFAULTS = {
     PluginsEnabled      = "",
     MainWindowSize      = { width = 1024, height = 640 },
     PluginSettings      = {},
+    PluginStates        = {},
     CombinedViewLeft    = "",
     CombinedViewRight   = "",
     CombinedViewSplit   = "vertical",
@@ -128,6 +129,17 @@ end
 function settings.set_plugin_settings(plugin_id, value)
     settings.values.PluginSettings = settings.values.PluginSettings or {}
     settings.values.PluginSettings[plugin_id] = value
+    settings.save()
+end
+
+function settings.get_plugin_state(plugin_id)
+    settings.values.PluginStates = settings.values.PluginStates or {}
+    return settings.values.PluginStates[plugin_id]
+end
+
+function settings.set_plugin_state(plugin_id, value)
+    settings.values.PluginStates = settings.values.PluginStates or {}
+    settings.values.PluginStates[plugin_id] = value
     settings.save()
 end
 

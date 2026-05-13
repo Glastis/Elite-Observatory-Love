@@ -24,6 +24,8 @@ function Core.new(plugin_id, plugin_storage_root)
     self.version = "1.0.0-lua"
     self._status = nil
     self.helpers = plugin_helpers
+    self._state_owner = nil
+    self._state_defaults = nil
     return self
 end
 
@@ -102,6 +104,29 @@ end
 -- Settings ----------------------------------------------------------------
 function Core:save_settings(plugin_settings)
     settings.set_plugin_settings(self.plugin_id, plugin_settings)
+end
+
+-- State ------------------------------------------------------------------
+function Core:bind_state(owner, defaults)
+    self._state_owner = owner
+    self._state_defaults = defaults or {}
+    local saved = settings.get_plugin_state(self.plugin_id) or {}
+    for key, default_value in pairs(self._state_defaults) do
+        if saved[key] ~= nil then
+            owner[key] = saved[key]
+        elseif owner[key] == nil then
+            owner[key] = default_value
+        end
+    end
+end
+
+function Core:save_state()
+    if not self._state_owner or not self._state_defaults then return end
+    local snapshot = {}
+    for key in pairs(self._state_defaults) do
+        snapshot[key] = self._state_owner[key]
+    end
+    settings.set_plugin_state(self.plugin_id, snapshot)
 end
 
 -- Paths -------------------------------------------------------------------
