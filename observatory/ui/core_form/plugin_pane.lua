@@ -53,6 +53,7 @@ local TOOLBAR_BUTTON_BUILDERS = {
     { label = "GROUP BY BODY",      setter = "set_grouping",       flag = "group_by_body" },
     { label = "CLOSE TO NEBULA",    setter = "set_near_nebula",    flag = "near_nebula" },
     { label = "CLOSE TO GUARDIAN",  setter = "set_near_guardian",  flag = "near_guardian" },
+    { label = "SHOW HIDDEN",        setter = "set_show_hidden",    flag = "is_show_hidden" },
 }
 
 local function resolve_value(value, plugin)

@@ -1216,6 +1216,135 @@ do
         "FSS-only body still gets material-based variant prediction")
 end
 
+-- construction: depot tracking, cargo offset and completion ---------------
+do
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+    local construction_amounts  = require("plugins.construction.amounts")
+
+    construction_state.reset()
+
+    local MARKET = "3704402432"
+    local function unfinished()
+        return construction_amounts.unfinished(
+            construction_state.get_site(MARKET))
+    end
+    local function entry_by_needed(entries, needed)
+        for _, entry in ipairs(entries) do
+            if entry.needed == needed then return entry end
+        end
+        return nil
+    end
+
+    construction_handlers.dispatch({
+        event = "Docked", MarketID = MARKET,
+        StationName = "Stardust Refinery", StarSystem = "Hixkar",
+    }, {})
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.25, ConstructionComplete = false,
+        ConstructionFailed = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 1000, ProvidedAmount = 200, Payment = 100 },
+            { Name = "$ceramiccomposites_name;",
+              Name_Localised = "Ceramic Composites",
+              RequiredAmount = 500, ProvidedAmount = 500, Payment = 80 },
+            { Name = "$titanium_name;", Name_Localised = "Titanium",
+              RequiredAmount = 300, ProvidedAmount = 0, Payment = 120 },
+        },
+    }, {})
+
+    local site = construction_state.get_site(MARKET)
+    truthy(site, "the depot event registers a construction site")
+    truthy(site.label:find("Stardust Refinery"),
+        "site label resolves the station name from a prior Docked event")
+    truthy(site.label:find("Hixkar"), "site label includes the system name")
+    eq(site.progress, 0.25, "site keeps the reported ConstructionProgress")
+
+    local entries = unfinished()
+    eq(#entries, 2, "only the two unfinished resources are listed")
+    truthy(entry_by_needed(entries, 800), "Steel still needs 1000-200 units")
+    truthy(entry_by_needed(entries, 300), "Titanium still needs its full 300 units")
+    for _, entry in ipairs(entries) do
+        truthy(entry.resource.display ~= "Ceramic Composites",
+            "a fully delivered resource is hidden")
+    end
+
+    local needed_total, _, to_buy_total = construction_amounts.site_totals(site)
+    eq(needed_total, 1100, "site totals sum the unfinished requirements")
+    eq(to_buy_total, 1100, "everything is still to buy before any cargo")
+
+    construction_handlers.dispatch({
+        event = "Cargo", Vessel = "Ship",
+        Inventory = {
+            { Name = "steel", Name_Localised = "Steel", Count = 150, Stolen = 0 },
+        },
+    }, {})
+    local steel = entry_by_needed(unfinished(), 800)
+    truthy(steel, "steel is still listed after the cargo update")
+    eq(steel.in_cargo, 150, "in_cargo reflects what the hold carries")
+    eq(steel.to_buy, 650, "to_buy is the shortfall once cargo is accounted for")
+    truthy(unfinished()[1].to_buy >= unfinished()[2].to_buy,
+        "unfinished resources are sorted by units left to buy")
+
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 1.0, ConstructionComplete = true,
+        ResourcesRequired = {},
+    }, {})
+    eq(construction_state.get_site(MARKET), nil,
+        "a completed construction site is dropped from state")
+    eq(construction_state.site_count(), 0,
+        "state reports no remaining construction sites")
+end
+
+-- construction: hiding sites and visible-count bookkeeping ---------------
+do
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+
+    construction_state.reset()
+
+    local function add_site(market_id)
+        construction_handlers.dispatch({
+            event = "ColonisationConstructionDepot", MarketID = market_id,
+            ConstructionProgress = 0.5, ConstructionComplete = false,
+            ConstructionFailed = false, ResourcesRequired = {},
+        }, {})
+    end
+
+    add_site("100")
+    add_site("200")
+
+    eq(construction_state.site_count(), 2, "two construction sites are registered")
+    eq(construction_state.visible_count(), 2, "both sites start visible")
+    eq(construction_state.is_hidden("100"), false, "a fresh site is not hidden")
+
+    construction_state.set_hidden("100", true)
+    eq(construction_state.is_hidden("100"), true, "set_hidden marks a site hidden")
+    eq(construction_state.visible_count(), 1, "a hidden site drops the visible count")
+    eq(construction_state.site_count(), 2, "hiding keeps the total site count")
+
+    local sorted = construction_state.sites_sorted()
+    eq(#sorted, 2, "sites_sorted lists hidden sites alongside visible ones")
+    eq(sorted[1].is_hidden, false, "visible sites sort ahead of hidden ones")
+    eq(sorted[2].is_hidden, true, "hidden sites sort last")
+
+    construction_state.set_hidden("100", false)
+    eq(construction_state.is_hidden("100"), false, "set_hidden can unhide a site")
+    eq(construction_state.visible_count(), 2, "unhiding restores the visible count")
+
+    construction_state.set_hidden("200", true)
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = "200",
+        ConstructionProgress = 1.0, ConstructionComplete = true,
+        ResourcesRequired = {},
+    }, {})
+    eq(construction_state.is_hidden("200"), false,
+        "completing a site clears its hidden flag")
+end
+
 print(string.format("\n%d tests, %d failures", total, failures))
 os.exit(failures == 0 and 0 or 1)
 

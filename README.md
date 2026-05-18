@@ -6,7 +6,7 @@ Lua so it runs unchanged on Windows and Linux (LÖVE 11.x).
 
 ## Features
 
-Three plugins ship with the app.
+Four plugins ship with the app.
 
 ### Explorer
 
@@ -29,6 +29,13 @@ Biological sampling helper: lists detected species, their codex value
 and the minimum sample distance to clear before the next sample.
 
 <p align="center"><img src="docs/screenshots/bioinsights.png" alt="Bio Insights tab" width="720"></p>
+
+### Construction Tracker
+
+Tracks colonisation construction sites. Every depot you visit is
+recorded and persisted across launches; under each site it lists the
+commodities still needed, how much of each you already carry in your
+hold and how much is left to buy.
 
 ### Core settings
 

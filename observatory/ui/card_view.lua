@@ -134,6 +134,9 @@ function card_view.draw(view_state, x, y, w, h, opts)
     local max_scroll = clamp_scroll(view_state, content_h, h)
     draw_grid(layout, view_state, x, y, content_w, h, opts)
     draw_scrollbar(view_state, max_scroll, x, y, w, h, content_h, scrollbar_w)
+    if opts.draw_overlay then
+        opts.draw_overlay(view_state, x, y, content_w, h)
+    end
     return view_state
 end
 
