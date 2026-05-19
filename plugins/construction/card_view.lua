@@ -440,25 +440,25 @@ local function fmt_qty(value)
         math.floor(value or 0)))
 end
 
-local function copy_system_to_clipboard(view_state, system)
-    if not system then return end
+local function copy_system_to_clipboard(view_state, stop)
+    if not stop or not stop.system then return end
     if love.system and love.system.setClipboardText then
-        love.system.setClipboardText(system)
+        love.system.setClipboardText(stop.system)
     end
     view_state.route_copy = {
-        system  = system,
+        stop    = stop,
         expires = love.timer.getTime() + COPY_FEEDBACK_S,
     }
 end
 
-local function is_copy_active(view_state, system)
+local function is_copy_active(view_state, stop)
     local feedback = view_state.route_copy
-    return feedback ~= nil and feedback.system == system
+    return feedback ~= nil and feedback.stop == stop
         and love.timer.getTime() < feedback.expires
 end
 
 local function stop_system_label(view_state, stop)
-    if is_copy_active(view_state, stop.system) then
+    if is_copy_active(view_state, stop) then
         return COPY_FEEDBACK_LABEL, theme.colors.success
     end
     return string.format(STOP_LY_FORMAT, fmt_ly(stop.distance_ly)),
@@ -490,7 +490,7 @@ local function draw_stop_system(stop, view_state, x, y, w)
     draw_truncated_name(stop.system or "?", FONT_STOP_SYSTEM, name_color,
         x, y, STOP_SYSTEM_H, w - label_w - NUM_GAP)
     if input.clicked_in(x, y, w, STOP_SYSTEM_H) and not view_state.menu_market then
-        copy_system_to_clipboard(view_state, stop.system)
+        copy_system_to_clipboard(view_state, stop)
     end
 end
 
