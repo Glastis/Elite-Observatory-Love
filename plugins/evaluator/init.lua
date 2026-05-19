@@ -2,6 +2,7 @@ local constants = require("plugins.evaluator.constants")
 local handlers = require("plugins.evaluator.handlers")
 local card_view = require("plugins.evaluator.card_view")
 local settings_helpers = require("observatory.plugin_helpers.settings")
+local toolbar_buttons = require("observatory.plugin_helpers.toolbar")
 
 local SORT_MODE_CYCLE = {
     body  = "price",
@@ -33,6 +34,11 @@ local Plugin = {
         notify_on_high_value        = true,
         minimum_high_value_notify   = constants.DEFAULT_HIGH_VALUE_NOTIFY,
         show_headers                = true,
+    },
+    toolbar = {
+        toolbar_buttons.sort_mode,
+        toolbar_buttons.system_hidden,
+        toolbar_buttons.scanned_hidden,
     },
 }
 

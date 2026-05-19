@@ -2,7 +2,7 @@ local theme       = require("observatory.ui.theme")
 local input       = require("observatory.ui.input")
 local text        = require("observatory.ui.text")
 local icon        = require("observatory.ui.icon")
-local body_value  = require("observatory.body_value")
+local body_value  = require("observatory.plugin_helpers.body_value")
 local body_colors = require("plugins.example.body_colors")
 
 local M = {}

@@ -3,7 +3,7 @@ local state = require("plugins.bioinsights.state")
 local species_values = require("plugins.bioinsights.species_values")
 local variants = require("plugins.bioinsights.variants")
 local body_value = require("plugins.bioinsights.body_value")
-local hierarchy = require("observatory.grid_hierarchy")
+local hierarchy = require("observatory.plugin_helpers.grid_hierarchy")
 
 local grid = {}
 

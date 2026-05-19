@@ -1,5 +1,5 @@
 local tree_view = require("plugins.example.tree_view")
-local body_value = require("observatory.body_value")
+local body_value = require("observatory.plugin_helpers.body_value")
 local journal_helpers = require("observatory.plugin_helpers.journal")
 local format_helpers = require("observatory.plugin_helpers.format")
 local settings_helpers = require("observatory.plugin_helpers.settings")

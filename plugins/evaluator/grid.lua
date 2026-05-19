@@ -1,6 +1,6 @@
 local constants = require("plugins.evaluator.constants")
 local state = require("plugins.evaluator.state")
-local hierarchy = require("observatory.grid_hierarchy")
+local hierarchy = require("observatory.plugin_helpers.grid_hierarchy")
 
 local grid = {}
 

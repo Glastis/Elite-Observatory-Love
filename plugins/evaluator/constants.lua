@@ -1,4 +1,4 @@
-local body_value = require("observatory.body_value")
+local body_value = require("observatory.plugin_helpers.body_value")
 
 return {
     GRID_COLUMNS = {

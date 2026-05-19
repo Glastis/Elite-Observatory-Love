@@ -13,12 +13,19 @@ local PERSISTENT_STATE_DEFAULTS = {
     ship_params    = { cargo_capacity = "", jump_loaded = "", jump_unloaded = "" },
 }
 
+local SHOW_HIDDEN_BUTTON = {
+    label  = "SHOW HIDDEN",
+    setter = "set_show_hidden",
+    flag   = "is_show_hidden",
+}
+
 local Plugin = {
     id         = "construction",
     name       = "Construction Tracker",
     short_name = "Construction",
     version    = "0.2.0",
     default_settings = {},
+    toolbar = { SHOW_HIDDEN_BUTTON },
 }
 
 local core_ref

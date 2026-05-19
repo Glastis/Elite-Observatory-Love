@@ -3,6 +3,19 @@ local handlers = require("plugins.bioinsights.handlers")
 local card_view = require("plugins.bioinsights.card_view")
 local state = require("plugins.bioinsights.state")
 local settings_helpers = require("observatory.plugin_helpers.settings")
+local toolbar_buttons = require("observatory.plugin_helpers.toolbar")
+
+local NEAR_NEBULA_BUTTON = {
+    label  = "CLOSE TO NEBULA",
+    setter = "set_near_nebula",
+    flag   = "near_nebula",
+}
+
+local NEAR_GUARDIAN_BUTTON = {
+    label  = "CLOSE TO GUARDIAN",
+    setter = "set_near_guardian",
+    flag   = "near_guardian",
+}
 
 local SORT_MODE_CYCLE = {
     body  = "price",
@@ -30,6 +43,13 @@ local Plugin = {
         minimum_high_value     = constants.HIGH_VALUE_THRESHOLD,
         only_show_high_value   = false,
         show_headers           = true,
+    },
+    toolbar = {
+        toolbar_buttons.sort_mode,
+        toolbar_buttons.system_hidden,
+        toolbar_buttons.scanned_hidden,
+        NEAR_NEBULA_BUTTON,
+        NEAR_GUARDIAN_BUTTON,
     },
 }
 

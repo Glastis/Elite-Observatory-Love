@@ -8,54 +8,6 @@ local TOOLBAR_GAP = 12
 local TOOLBAR_EXTRA_GAP = 12
 local SECTION_GAP = 10
 local PLACEHOLDER_VOFFSET = 8
-local DEFAULT_SORT_MODE = "body"
-
-local SYSTEM_TOGGLE_LABEL = {
-    [true]  = "SHOW SYSTEM",
-    [false] = "HIDE SYSTEM",
-}
-
-local SCANNED_TOGGLE_LABEL = {
-    [true]  = "SHOW SCANNED",
-    [false] = "HIDE SCANNED",
-}
-
-local SORT_MODE_LABEL = {
-    body  = "SORT BY BODY",
-    price = "SORT BY PRICE",
-}
-
-local function system_toggle_label(plugin)
-    return SYSTEM_TOGGLE_LABEL[plugin.is_system_hidden == true]
-end
-
-local function scanned_toggle_label(plugin)
-    return SCANNED_TOGGLE_LABEL[plugin.is_scanned_hidden == true]
-end
-
-local function sort_mode_label(plugin)
-    return SORT_MODE_LABEL[plugin.sort_mode or DEFAULT_SORT_MODE]
-        or SORT_MODE_LABEL[DEFAULT_SORT_MODE]
-end
-
-local function sort_mode_is_primary(plugin)
-    return (plugin.sort_mode or DEFAULT_SORT_MODE) ~= DEFAULT_SORT_MODE
-end
-
-local TOOLBAR_BUTTON_BUILDERS = {
-    {
-        kind    = "cycle",
-        label   = sort_mode_label,
-        setter  = "cycle_sort_mode",
-        primary = sort_mode_is_primary,
-    },
-    { label = system_toggle_label,  setter = "set_system_hidden",  flag = "is_system_hidden" },
-    { label = scanned_toggle_label, setter = "set_scanned_hidden", flag = "is_scanned_hidden" },
-    { label = "GROUP BY BODY",      setter = "set_grouping",       flag = "group_by_body" },
-    { label = "CLOSE TO NEBULA",    setter = "set_near_nebula",    flag = "near_nebula" },
-    { label = "CLOSE TO GUARDIAN",  setter = "set_near_guardian",  flag = "near_guardian" },
-    { label = "SHOW HIDDEN",        setter = "set_show_hidden",    flag = "is_show_hidden" },
-}
 
 local function resolve_value(value, plugin)
     if type(value) == "function" then return value(plugin) end
@@ -103,7 +55,7 @@ end
 
 local function build_toolbar_items(state, plugin)
     local items = {}
-    for _, definition in ipairs(TOOLBAR_BUTTON_BUILDERS) do
+    for _, definition in ipairs(plugin.toolbar or {}) do
         local item = build_toolbar_item(state, plugin, definition)
         if item then table.insert(items, item) end
     end

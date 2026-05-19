@@ -1,5 +1,5 @@
 local state = require("plugins.evaluator.state")
-local body_value = require("plugins.evaluator.body_value")
+local body_value = require("observatory.plugin_helpers.body_value")
 local constants = require("plugins.evaluator.constants")
 local journal_helpers = require("observatory.plugin_helpers.journal")
 

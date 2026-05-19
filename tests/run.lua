@@ -93,7 +93,7 @@ end
 
 -- evaluator: body_value ---------------------------------------------------
 do
-    local body_value = require("plugins.evaluator.body_value")
+    local body_value = require("observatory.plugin_helpers.body_value")
     local constants = require("plugins.evaluator.constants")
     local FD  = constants.FIRST_DISCOVERY_MULTIPLIER
     local MAP = constants.MAPPING_MULTIPLIER

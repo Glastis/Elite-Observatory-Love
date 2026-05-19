@@ -410,6 +410,12 @@ exposing:
 
 - `id`, `name`, `short_name`, `version` — string identifiers
 - `grid = { columns = {...}, rows = {} }` — UI grid descriptor
+- `toolbar = { <button>, ... }` — optional list of toolbar button
+  descriptors. Each button is `{ kind = "toggle"|"cycle", label =
+  string|function(plugin), setter = "<plugin method>", flag = "<plugin
+  field>", primary = boolean|function(plugin) }`. The generic pane never
+  hardcodes plugin buttons — every plugin declares its own. Reusable
+  descriptors live in `observatory/plugin_helpers/toolbar.lua`.
 - `default_settings` — table merged into persistent settings
 - `Plugin:load(core)` — receive the core API (see `observatory/core.lua`)
 - `Plugin:journal_event(entry)` — called on every parsed journal line
