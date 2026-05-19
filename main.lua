@@ -131,5 +131,6 @@ end
 
 function love.quit()
     http_service.shutdown()
+    log_monitor.shutdown()
     settings.save()
 end

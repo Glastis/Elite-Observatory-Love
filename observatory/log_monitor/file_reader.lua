@@ -58,20 +58,20 @@ end
 
 function file_reader.read_all_lines(path)
     local f = io.open(path, "rb")
-    if not f then return {} end
+    if not f then return {}, 0 end
     local content = f:read("*a") or ""
     f:close()
     local lines = {}
     for line in content:gmatch("[^\n]+") do
         table.insert(lines, strip_cr(line))
     end
-    return lines
+    return lines, #content
 end
 
-function file_reader.mark_consumed(state, path)
-    local size = paths.file_size(path) or 0
-    state.file_offsets[path] = size
-    state.file_sizes[path] = size
+function file_reader.mark_consumed(state, path, size)
+    local consumed = size or paths.file_size(path) or 0
+    state.file_offsets[path] = consumed
+    state.file_sizes[path] = consumed
 end
 
 return file_reader

@@ -6,7 +6,7 @@ local listeners = require("observatory.log_monitor.listeners")
 local journal_files = require("observatory.log_monitor.journal_files")
 local file_reader = require("observatory.log_monitor.file_reader")
 local preread = require("observatory.log_monitor.preread")
-local batch_job = require("observatory.log_monitor.batch_job")
+local parse_pool = require("observatory.log_monitor.parse_pool")
 
 local log_monitor = {}
 
@@ -27,6 +27,7 @@ local ANCILLARY_EVENTS = {
 local INVALID_JSON_EVENT = "InvalidJson"
 local UNKNOWN_EVENT = "Unknown"
 local STATUS_FILE = "Status.json"
+local BATCH_SPIN_SLEEP_S = 0.0005
 
 local SETTING_POLL_REALTIME = "LogPollIntervalRealtimeS"
 local SETTING_POLL_ALT = "LogPollIntervalAltS"
@@ -49,7 +50,7 @@ local state = {
     poll_timer     = 0,
     first_start    = true,
     dir_cache      = journal_files.create_cache(),
-    batch_job      = nil,
+    batch_pool     = nil,
 }
 
 local function settings_or(default, key)
@@ -147,17 +148,21 @@ local function dispatch_ancillary_for(entry)
     dispatch("journal_entry", parsed)
 end
 
-local function process_line(line, file_label)
-    local ok, entry = pcall(journal_reader.deserialize, line)
-    if not ok then
-        print(string.format("[log_monitor] failed to parse line in %s: %s",
-            tostring(file_label), tostring(entry)))
-        return
-    end
+local function process_entry(entry)
     state.last_event = entry.event or UNKNOWN_EVENT
     state.total_events = state.total_events + 1
     dispatch("journal_entry", entry)
     dispatch_ancillary_for(entry)
+end
+
+local function process_line(line, file_label)
+    local is_ok, entry = pcall(journal_reader.deserialize, line)
+    if not is_ok then
+        print(string.format("[log_monitor] failed to parse line in %s: %s",
+            tostring(file_label), tostring(entry)))
+        return
+    end
+    process_entry(entry)
 end
 
 local function process_lines(lines, file_label)
@@ -191,32 +196,44 @@ function log_monitor.stop()
     set_state(state_flags.STATE.Idle)
 end
 
-local function drain_batch_blocking()
-    while batch_job.step(state, state.batch_job, batch_budget(), process_line) do end
-    state.batch_job = nil
+local function finish_batch()
+    state.batch_pool = nil
     set_state(state_flags.clear_flag(state.current_state, state_flags.STATE.Batch))
+end
+
+local function drain_batch_blocking()
+    while true do
+        local is_running, made_progress = parse_pool.step(
+            state.batch_pool, batch_budget(), state, process_entry)
+        if not is_running then break end
+        if not made_progress and love and love.timer then
+            love.timer.sleep(BATCH_SPIN_SLEEP_S)
+        end
+    end
+    finish_batch()
 end
 
 function log_monitor.read_all(opts)
     opts = opts or {}
     state.first_start = false
     set_state(state_flags.set_flag(state.current_state, state_flags.STATE.Batch))
-    state.batch_job = batch_job.start(list_journal_files())
+    state.batch_pool = parse_pool.start(list_journal_files())
     if opts.blocking then drain_batch_blocking() end
 end
 
 function log_monitor.batch_progress()
-    return batch_job.snapshot(state.batch_job)
+    return parse_pool.snapshot(state.batch_pool)
+end
+
+function log_monitor.shutdown()
+    parse_pool.shutdown()
 end
 
 local function step_batch_if_active()
-    if not state.batch_job then return end
-    local still_running = batch_job.step(state, state.batch_job,
-        batch_budget(), process_line)
-    if not still_running then
-        state.batch_job = nil
-        set_state(state_flags.clear_flag(state.current_state, state_flags.STATE.Batch))
-    end
+    if not state.batch_pool then return end
+    local is_running = parse_pool.step(state.batch_pool, batch_budget(),
+        state, process_entry)
+    if not is_running then finish_batch() end
 end
 
 local function poll_latest_journal()
