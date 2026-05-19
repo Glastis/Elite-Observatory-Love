@@ -37,6 +37,16 @@ recorded and persisted across launches; under each site it lists the
 commodities still needed, how much of each you already carry in your
 hold and how much is left to buy.
 
+It also plans the supply run for you. Enter your ship's cargo capacity
+and laden / unladen jump ranges in the toolbar, and the planner queries
+the [Ardent](https://ardent-insight.com/) market data to work out where
+to buy each commodity and in which order to haul it back to the depot —
+full-cargo runs first, then a combined multi-commodity pass for the
+leftovers. Each card shows the next stops with their distance and jump
+count; `Refresh route` recomputes it on demand.
+
+<p align="center"><img src="docs/screenshots/construction.png" alt="Construction Tracker tab" width="720"></p>
+
 ### Core settings
 
 Pick the journal folder (auto-detected on first launch, overridable
