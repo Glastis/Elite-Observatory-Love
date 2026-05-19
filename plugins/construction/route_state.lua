@@ -2,10 +2,22 @@ local route_state = {}
 
 local routes = {}
 local in_flight = {}
+local next_stop_id = 1
+
+local function assign_stop_ids(route)
+    if not route or type(route.stops) ~= "table" then return end
+    local index = 1
+    while route.stops[index] do
+        route.stops[index].id = next_stop_id
+        next_stop_id = next_stop_id + 1
+        index = index + 1
+    end
+end
 
 function route_state.reset()
     routes = {}
     in_flight = {}
+    next_stop_id = 1
 end
 
 function route_state.get(market_id)
@@ -13,6 +25,7 @@ function route_state.get(market_id)
 end
 
 function route_state.set(market_id, route)
+    assign_stop_ids(route)
     routes[market_id] = route
 end
 
@@ -26,6 +39,20 @@ end
 function route_state.remove(market_id)
     routes[market_id] = nil
     in_flight[market_id] = nil
+end
+
+function route_state.prune_stop(market_id, stop_id)
+    local route = routes[market_id]
+    if not route or type(route.stops) ~= "table" then return end
+    local index = 1
+    while route.stops[index] do
+        if route.stops[index].id == stop_id then
+            table.remove(route.stops, index)
+            route.total_stops = #route.stops
+            return
+        end
+        index = index + 1
+    end
 end
 
 function route_state.preview(market_id, count)

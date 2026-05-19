@@ -9,6 +9,7 @@ local current_system_record = nil
 local on_change = function() end
 local on_site_added = function() end
 local on_site_removed = function() end
+local on_site_updated = function() end
 local on_refresh_route = function() end
 
 function state.set_on_change(callback)
@@ -21,6 +22,10 @@ end
 
 function state.set_on_site_removed(callback)
     on_site_removed = callback or function() end
+end
+
+function state.set_on_site_updated(callback)
+    on_site_updated = callback or function() end
 end
 
 function state.set_on_refresh_route(callback)
@@ -82,7 +87,11 @@ function state.upsert_site(market_id, site)
     local is_new_site = sites[market_id] == nil
     sites[market_id] = site
     on_change()
-    if is_new_site then on_site_added(market_id) end
+    if is_new_site then
+        on_site_added(market_id)
+        return
+    end
+    on_site_updated(market_id)
 end
 
 function state.remove_site(market_id)

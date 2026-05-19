@@ -1518,6 +1518,36 @@ do
     eq(route_cache.get("https://x/a"), nil, "reset clears every cached payload")
 end
 
+-- construction: route consumption marks delivered stops ------------------
+do
+    local route_consumption = require("plugins.construction.route_consumption")
+
+    local route = {
+        stops = {
+            { pickups = { { commodity_key = "steel", quantity = 100 } } },
+            { pickups = { { commodity_key = "steel", quantity = 100 } } },
+            { pickups = {
+                { commodity_key = "steel", quantity = 50 },
+                { commodity_key = "titanium", quantity = 50 },
+            } },
+        },
+    }
+
+    route_consumption.apply(route, { steel = 120 })
+    truthy(route.stops[1].is_completed,
+        "a stop completes once its full pickup is delivered to the depot")
+    eq(route.stops[2].is_completed, nil,
+        "a partially delivered stop is not yet complete")
+    eq(route.stops[3].is_completed, nil,
+        "a stop with no delivered commodity stays open")
+
+    route_consumption.apply(route, { steel = 130, titanium = 50 })
+    truthy(route.stops[2].is_completed,
+        "the remaining steel finishes the second stop")
+    truthy(route.stops[3].is_completed,
+        "a multi-commodity stop needs every commodity delivered")
+end
+
 -- construction: route service fan-out and orchestration ------------------
 do
     local json                  = require("lib.json")
@@ -1530,6 +1560,7 @@ do
     construction_state.reset()
     route_state.reset()
     route_cache.reset()
+    construction_state.set_on_site_updated(route_service.on_site_updated)
 
     local MARKET = "900"
     local exports_body = json.encode({
@@ -1593,6 +1624,20 @@ do
     eq(route.stops[1].station, "Steelworks",
         "the route sources steel from the stubbed station")
     eq(route.stops[1].system, "Source", "the stop names the source system")
+
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.6, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 150, ProvidedAmount = 100 },
+        },
+    }, {})
+    local delivered = route_state.get(MARKET)
+    truthy(delivered.stops[1].is_completed,
+        "delivering a full bulk load completes the first route stop")
+    eq(delivered.stops[2].is_completed, nil,
+        "the leftover stop waits until its own commodity is delivered")
 end
 
 print(string.format("\n%d tests, %d failures", total, failures))

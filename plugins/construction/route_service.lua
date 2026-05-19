@@ -5,12 +5,14 @@ local route_state     = require("plugins.construction.route_state")
 local route_api       = require("plugins.construction.route_api")
 local route_cache     = require("plugins.construction.route_cache")
 local route_planner   = require("plugins.construction.route_planner")
+local route_consumption = require("plugins.construction.route_consumption")
 local commodity_names = require("plugins.construction.commodity_names")
 
 local route_service = {}
 
 local core_ref
 local ship_params = {}
+local delivered_baseline = {}
 
 local function numeric_ship()
     local cargo = tonumber(ship_params.cargo_capacity)
@@ -34,6 +36,28 @@ local function build_demand(site)
         end
     end
     return demand, displays
+end
+
+local function provided_by_key(site)
+    local map = {}
+    local resources = (site and site.resources) or {}
+    local index = 1
+    while resources[index] do
+        map[resources[index].key] = resources[index].provided or 0
+        index = index + 1
+    end
+    return map
+end
+
+local function provided_delta(baseline, current)
+    local delta = {}
+    local key = next(current)
+    while key do
+        local gained = current[key] - (baseline[key] or 0)
+        if gained > 0 then delta[key] = gained end
+        key = next(current, key)
+    end
+    return delta
 end
 
 local function ready_empty_route(ship)
@@ -86,6 +110,7 @@ local function finish_fetch(fetch)
     route.computed_at = os.time()
     route.depot_system = site.system_name
     route_state.set(fetch.market_id, route)
+    delivered_baseline[fetch.market_id] = provided_by_key(site)
 end
 
 local function decrement_and_maybe_finish(fetch)
@@ -183,7 +208,9 @@ function route_service.compute_for_site(market_id, is_forced)
     if not is_forced and is_route_current(market_id, ship) then return end
     local demand, displays = build_demand(site)
     if not next(demand) then
-        return route_state.set(market_id, ready_empty_route(ship))
+        route_state.set(market_id, ready_empty_route(ship))
+        delivered_baseline[market_id] = provided_by_key(site)
+        return
     end
     start_fetch(market_id, site.system_name, ship, depot_coords, demand,
         displays)
@@ -205,6 +232,22 @@ end
 function route_service.on_site_removed(market_id)
     cancel_in_flight(market_id)
     route_state.remove(market_id)
+    delivered_baseline[market_id] = nil
+end
+
+function route_service.on_site_updated(market_id)
+    local route = route_state.get(market_id)
+    if not route or route.status ~= constants.STATUS_READY then return end
+    local baseline = delivered_baseline[market_id]
+    if not baseline then return end
+    local site = state.get_site(market_id)
+    if not site then return end
+    local current = provided_by_key(site)
+    local delta = provided_delta(baseline, current)
+    delivered_baseline[market_id] = current
+    if next(delta) then
+        route_consumption.apply(route, delta)
+    end
 end
 
 function route_service.on_monitor_state_changed()

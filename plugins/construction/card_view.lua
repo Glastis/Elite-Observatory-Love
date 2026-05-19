@@ -9,6 +9,7 @@ local amounts         = require("plugins.construction.amounts")
 local constants       = require("plugins.construction.constants")
 local route_state     = require("plugins.construction.route_state")
 local route_constants = require("plugins.construction.route_constants")
+local route_anim      = require("plugins.construction.route_anim")
 
 local CARD_GAP          = 12
 local CARD_PAD_X        = 14
@@ -44,6 +45,7 @@ local STOP_SYSTEM_H   = 20
 local STOP_STATION_H  = 16
 local STOP_RESOURCE_H = 16
 local COPY_FEEDBACK_S = 1.6
+local STOP_DONE_BG    = { 0.07, 0.16, 0.10, 1 }
 
 local MENU_BTN_W       = 24
 local MENU_BTN_GAP     = 6
@@ -477,8 +479,8 @@ local function draw_truncated_name(name, spec, color, x, y, h, w)
         x, y, h, { font = font_for(spec), color = color })
 end
 
-local function draw_stop_system(stop, view_state, x, y, w)
-    local is_hovered = input.in_rect(x, y, w, STOP_SYSTEM_H)
+local function draw_stop_system(stop, view_state, x, y, w, is_locked)
+    local is_hovered = not is_locked and input.in_rect(x, y, w, STOP_SYSTEM_H)
     if is_hovered then
         love.graphics.setColor(theme.colors.seg_hover)
         love.graphics.rectangle("fill", x, y, w, STOP_SYSTEM_H)
@@ -489,6 +491,7 @@ local function draw_stop_system(stop, view_state, x, y, w)
     local name_color = is_hovered and theme.colors.accent or theme.colors.text
     draw_truncated_name(stop.system or "?", FONT_STOP_SYSTEM, name_color,
         x, y, STOP_SYSTEM_H, w - label_w - NUM_GAP)
+    if is_locked then return end
     if input.clicked_in(x, y, w, STOP_SYSTEM_H) and not view_state.menu_market then
         copy_system_to_clipboard(view_state, stop)
     end
@@ -519,19 +522,49 @@ local function draw_stop_pickups(stop, x, y, w)
     end
 end
 
-local function draw_stop_card(stop, view_state, x, y, w)
-    panel.draw(x, y, w, stop_card_height(stop), {
-        bg = theme.colors.panel_deep, border = theme.colors.rule,
-        left_accent = theme.colors.accent_rule, left_accent_w = 2,
-    })
+local function mix_channel(from, to, factor)
+    return from + (to - from) * factor
+end
+
+local function mix_color(from, to, factor)
+    return {
+        mix_channel(from[1], to[1], factor),
+        mix_channel(from[2], to[2], factor),
+        mix_channel(from[3], to[3], factor),
+        mix_channel(from[4] or 1, to[4] or 1, factor),
+    }
+end
+
+local function stop_panel_opts(green)
+    return {
+        bg          = mix_color(theme.colors.panel_deep, STOP_DONE_BG, green),
+        border      = mix_color(theme.colors.rule, theme.colors.success, green),
+        left_accent = mix_color(theme.colors.accent_rule,
+            theme.colors.success, green),
+        left_accent_w = 2,
+    }
+end
+
+local function draw_stop_fade(x, y, w, h, fade)
+    if fade >= 1 then return end
+    love.graphics.setColor(theme.with_alpha(theme.colors.panel, 1 - fade))
+    love.graphics.rectangle("fill", x, y, w, h)
+end
+
+local function draw_stop_card(stop, view_state, x, y, w, fade, green)
+    fade = fade or 1
+    green = green or 0
+    local h = stop_card_height(stop)
+    panel.draw(x, y, w, h, stop_panel_opts(green))
     local inner_x = x + STOP_CARD_PAD_X
     local inner_w = w - STOP_CARD_PAD_X * 2
     local cy = y + STOP_CARD_PAD_Y
-    draw_stop_system(stop, view_state, inner_x, cy, inner_w)
+    draw_stop_system(stop, view_state, inner_x, cy, inner_w, green > 0)
     cy = cy + STOP_SYSTEM_H
     draw_stop_station(stop, inner_x, cy, inner_w)
     cy = cy + STOP_STATION_H
     draw_stop_pickups(stop, inner_x, cy, inner_w)
+    draw_stop_fade(x, y, w, h, fade)
 end
 
 local function draw_route_summary(route, x, y, w)
@@ -564,12 +597,16 @@ local function draw_route_message(message, color_key, x, y, w)
 end
 
 local function draw_route_stops(card, view_state, x, y, w)
-    local cy = y
-    for _, stop in ipairs(card.route.stops) do
-        cy = cy + STOP_CARD_GAP
-        draw_stop_card(stop, view_state, x, cy, w)
-        cy = cy + stop_card_height(stop)
-    end
+    route_anim.run(view_state, card.market_id, card.route.stops, x, y, w, {
+        gap         = STOP_CARD_GAP,
+        stop_height = stop_card_height,
+        draw_stop   = function(stop, sx, sy, sw, fade, green)
+            draw_stop_card(stop, view_state, sx, sy, sw, fade, green)
+        end,
+        prune       = function(stop_id)
+            route_state.prune_stop(card.market_id, stop_id)
+        end,
+    })
 end
 
 local function draw_route_body(card, view_state, x, y, w)
