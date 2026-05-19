@@ -21,7 +21,7 @@ local PERSISTENT_STATE_DEFAULTS = {
 
 local Plugin = {
     id = "bioinsights",
-    name = "Observatory Bio Insights",
+    name = "Bio Insight",
     short_name = "BioInsights",
     version = "0.1.0",
     default_settings = {

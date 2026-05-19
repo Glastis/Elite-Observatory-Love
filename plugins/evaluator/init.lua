@@ -18,7 +18,7 @@ local PERSISTENT_STATE_DEFAULTS = {
 
 local Plugin = {
     id = "evaluator",
-    name = "Observatory Evaluator",
+    name = "Evaluator",
     short_name = "Evaluator",
     version = "0.2.0",
     default_settings = {
