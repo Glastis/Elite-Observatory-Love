@@ -7,6 +7,7 @@
 local settings = require("observatory.settings")
 local notifications = require("observatory.notifications")
 local audio_handler = require("observatory.audio_handler")
+local http_service = require("observatory.http_service")
 local log_monitor = require("observatory.log_monitor")
 local paths = require("observatory.paths")
 local plugin_helpers = require("observatory.plugin_helpers")
@@ -68,6 +69,14 @@ end
 -- Audio -------------------------------------------------------------------
 function Core:play_audio_file(file_path, options)
     audio_handler.play(file_path, options)
+end
+
+function Core:http_get(url, callback)
+    return http_service.request(url, callback)
+end
+
+function Core:http_cancel(request_id)
+    http_service.cancel(request_id)
 end
 
 -- Grid (data) -------------------------------------------------------------

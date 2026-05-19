@@ -5,6 +5,7 @@ local plugin_pane = {}
 
 local TOOLBAR_H = 24
 local TOOLBAR_GAP = 12
+local TOOLBAR_EXTRA_GAP = 12
 local SECTION_GAP = 10
 local PLACEHOLDER_VOFFSET = 8
 local DEFAULT_SORT_MODE = "body"
@@ -126,14 +127,24 @@ local function draw_row_count(plugin, x_right, y, h, font)
     })
 end
 
+local function draw_toolbar_extra(state, plugin, x, y, w, h)
+    if not plugin.draw_toolbar_extra or w <= 0 then return end
+    state.grid_state[plugin.id] = state.grid_state[plugin.id] or {}
+    plugin:draw_toolbar_extra(state.grid_state[plugin.id], x, y, w, h)
+end
+
 local function draw_toolbar(state, plugin, x, y, w, h, font)
     local items = build_toolbar_items(state, plugin)
+    local seg_w = 0
     if #items > 0 then
         state.seg_group[plugin.id] = state.seg_group[plugin.id] or {}
-        ui.seg.draw(state.seg_group[plugin.id], items, x, y,
+        seg_w = ui.seg.draw(state.seg_group[plugin.id], items, x, y,
             { h = h, font = font })
     end
+    local extra_x = x + seg_w
+    if seg_w > 0 then extra_x = extra_x + TOOLBAR_EXTRA_GAP end
     draw_row_count(plugin, x + w, y, h, font)
+    draw_toolbar_extra(state, plugin, extra_x, y, x + w - extra_x, h)
 end
 
 local function draw_grid_placeholder(plugin, x, body_y, w, body_h)

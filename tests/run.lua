@@ -1345,6 +1345,256 @@ do
         "completing a site clears its hidden flag")
 end
 
+-- construction: route distance + jump maths -------------------------------
+do
+    local route_distance = require("plugins.construction.route_distance")
+
+    eq(route_distance.between({ x = 0, y = 0, z = 0 },
+        { x = 3, y = 4, z = 0 }), 5, "euclidean distance over 3D coords")
+    eq(route_distance.between(nil, { x = 1 }), nil,
+        "distance is nil when a coordinate is missing")
+    eq(route_distance.jumps_for_leg(100, 30, 1), 4,
+        "jumps round up the leg distance over the jump range")
+    eq(route_distance.jumps_for_leg(0, 30, 1), 0,
+        "a zero-length leg costs no jump")
+    eq(route_distance.jumps_for_leg(10, 0, 1), 1,
+        "an unknown jump range falls back to the minimum")
+end
+
+-- construction: commodity name resolution --------------------------------
+do
+    local commodity_names = require("plugins.construction.commodity_names")
+    eq(commodity_names.to_api_name("steel"), "steel",
+        "a plain commodity key maps to itself")
+    eq(commodity_names.to_api_name(nil), nil,
+        "a missing commodity key resolves to nil")
+end
+
+-- construction: route planner --------------------------------------------
+do
+    local route_planner = require("plugins.construction.route_planner")
+
+    local function source(name, system, x, price, stock, is_orbital)
+        return {
+            station_name = name, system_name = system,
+            coords = { x = x, y = 0, z = 0 },
+            distance_to_arrival_ls = 100,
+            is_orbital = is_orbital ~= false,
+            price = price, stock = stock,
+        }
+    end
+
+    local ship = {
+        cargo_capacity = 100,
+        jump_range_loaded = 30,
+        jump_range_unloaded = 50,
+    }
+    local depot = { x = 0, y = 0, z = 0 }
+
+    local bulk = route_planner.compute({
+        demand = { steel = 250 },
+        displays = { steel = "Steel" },
+        sources_by_key = {
+            steel = { source("Mine", "Ore", 5, 10, 5000) },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(bulk.total_stops, 3, "a 250 t demand peels into 2 full loads + 1 remainder")
+    eq(bulk.stops[1].kind, "bulk", "the first peeled trip is a bulk full load")
+    eq(bulk.stops[1].pickups[1].quantity, 100, "a bulk stop carries a full hold")
+    eq(#bulk.unsatisfiable, 0, "a stocked commodity is fully satisfiable")
+
+    local multi = route_planner.compute({
+        demand = { alpha = 10, beta = 10, gamma = 10 },
+        displays = { alpha = "Alpha", beta = "Beta", gamma = "Gamma" },
+        sources_by_key = {
+            alpha = {
+                source("Near", "Close", 1, 5, 100),
+                source("Hub", "Mid", 50, 9, 100),
+            },
+            beta  = { source("Hub", "Mid", 50, 9, 100) },
+            gamma = { source("Hub", "Mid", 50, 9, 100) },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(multi.total_stops, 1,
+        "the multi-commodity hub is preferred over single-commodity detours")
+    eq(multi.stops[1].station, "Hub", "the route stops at the covering hub")
+
+    local orbital = route_planner.compute({
+        demand = { ore = 10 },
+        displays = { ore = "Ore" },
+        sources_by_key = {
+            ore = {
+                source("Ground", "Dirt", 1, 5, 100, false),
+                source("Station", "Sky", 9, 99, 100, true),
+            },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(orbital.stops[1].station, "Station",
+        "orbital stations win over cheaper, closer ground bases")
+
+    local missing = route_planner.compute({
+        demand = { rare = 5 },
+        displays = { rare = "Rare" },
+        sources_by_key = {},
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(missing.total_stops, 0, "a sourceless commodity yields no stops")
+    eq(missing.unsatisfiable[1], "rare",
+        "a sourceless commodity is reported unsatisfiable")
+
+    local far = route_planner.compute({
+        demand = { iron = 5 },
+        displays = { iron = "Iron" },
+        sources_by_key = { iron = { source("Distant", "FarSys", 600, 5, 5000) } },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(far.total_stops, 0, "a source beyond the max range yields no stops")
+    eq(far.unsatisfiable[1], "iron",
+        "a source beyond the max range is reported unsatisfiable")
+
+    local trade = route_planner.compute({
+        demand = { alloy = 100 },
+        displays = { alloy = "Alloy" },
+        sources_by_key = {
+            alloy = {
+                source("NearDear", "NearSys", 20, 1000, 5000),
+                source("FarCheap", "FarSys", 55, 900, 5000),
+            },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(trade.stops[1].station, "FarCheap",
+        "a 10% cheaper station is worth the two extra round-trip jumps")
+    eq(trade.stops[1].pickups[1].quantity, 100,
+        "a bulk stop only ever claims a full cargo hold")
+
+    local stay = route_planner.compute({
+        demand = { alloy = 100 },
+        displays = { alloy = "Alloy" },
+        sources_by_key = {
+            alloy = {
+                source("NearDear", "NearSys", 20, 1000, 5000),
+                source("FarFaint", "FarSys", 95, 980, 5000),
+            },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(stay.stops[1].station, "NearDear",
+        "a far station with only a 2% discount is not worth the extra jumps")
+
+    local phased = route_planner.compute({
+        demand = { heavy = 200, light = 10 },
+        displays = { heavy = "Heavy", light = "Light" },
+        sources_by_key = {
+            heavy = { source("FarBulk", "FarSys", 90, 10, 5000) },
+            light = { source("NearHub", "NearSys", 5, 10, 5000) },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    eq(phased.stops[1].kind, "bulk",
+        "full cargo loads are routed before any multi-commodity stop")
+    eq(phased.stops[1].station, "FarBulk",
+        "a distant bulk load still precedes a nearby leftover stop")
+    eq(phased.stops[#phased.stops].kind, "multi",
+        "leftover multi-commodity stops trail the easy full loads")
+end
+
+-- construction: persistent response cache --------------------------------
+do
+    local route_cache = require("plugins.construction.route_cache")
+    route_cache.reset()
+
+    eq(route_cache.get("https://x/a"), nil, "an unknown url is a cache miss")
+    route_cache.put("https://x/a", { value = 1 })
+    eq(route_cache.get("https://x/a").value, 1,
+        "a stored payload is served from the cache")
+    route_cache.put("https://x/b", { value = 2 }, os.time() - 3 * 60 * 60)
+    eq(route_cache.get("https://x/b"), nil,
+        "a payload older than the two-hour ttl is invalidated")
+    route_cache.reset()
+    eq(route_cache.get("https://x/a"), nil, "reset clears every cached payload")
+end
+
+-- construction: route service fan-out and orchestration ------------------
+do
+    local json                  = require("lib.json")
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+    local route_state           = require("plugins.construction.route_state")
+    local route_cache           = require("plugins.construction.route_cache")
+    local route_service         = require("plugins.construction.route_service")
+
+    construction_state.reset()
+    route_state.reset()
+    route_cache.reset()
+
+    local MARKET = "900"
+    local exports_body = json.encode({
+        { stationName = "Steelworks", systemName = "Source",
+          systemX = 10, systemY = 0, systemZ = 0,
+          stationType = "Coriolis", maxLandingPadSize = 3,
+          buyPrice = 50, stock = 1000, distanceToArrival = 200,
+          fleetCarrier = 0 },
+    })
+
+    local function fake_core()
+        local request_id = 0
+        local stubs = { exports = exports_body }
+        return {
+            http_get = function(_, url, callback)
+                request_id = request_id + 1
+                for keyword, body in pairs(stubs) do
+                    if url:find(keyword, 1, true) then
+                        callback({ is_ok = true, status = 200, body = body })
+                        return request_id
+                    end
+                end
+                callback({ is_ok = false, error = "unstubbed" })
+                return request_id
+            end,
+            http_cancel = function() end,
+            is_log_monitor_batch_reading = function() return false end,
+        }
+    end
+
+    construction_handlers.dispatch({
+        event = "Location", MarketID = MARKET,
+        StationName = "Hub Port", StarSystem = "Hub",
+        StarPos = { 0, 0, 0 },
+    }, {})
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.1, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 150, ProvidedAmount = 0 },
+        },
+    }, {})
+
+    route_service.init(fake_core())
+
+    route_service.set_ship_params({})
+    route_service.compute_for_site(MARKET, false)
+    eq(route_state.get(MARKET).status, "missing_params",
+        "an incomplete ship triggers the missing-params status")
+
+    route_service.set_ship_params({
+        cargo_capacity = "100", jump_loaded = "20", jump_unloaded = "30",
+    })
+    route_service.compute_for_site(MARKET, true)
+
+    local route = route_state.get(MARKET)
+    eq(route.status, "ready", "the fan-out completes into a ready route")
+    eq(route.total_stops, 2, "150 t over a 100 t hold yields a bulk + remainder")
+    eq(#route.unsatisfiable, 0, "the stocked commodity is fully satisfiable")
+    eq(route.stops[1].station, "Steelworks",
+        "the route sources steel from the stubbed station")
+    eq(route.stops[1].system, "Source", "the stop names the source system")
+end
+
 print(string.format("\n%d tests, %d failures", total, failures))
 os.exit(failures == 0 and 0 or 1)
 

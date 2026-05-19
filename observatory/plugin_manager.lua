@@ -15,6 +15,7 @@
 
 local Core = require("observatory.core")
 local settings = require("observatory.settings")
+local http_service = require("observatory.http_service")
 local log_monitor = require("observatory.log_monitor")
 local paths = require("observatory.paths")
 local error_channel = require("observatory.error_channel")
@@ -143,6 +144,15 @@ function plugin_manager.observatory_ready()
     for _, p in ipairs(plugins) do
         if not disabled[p.id] then
             method_call(p, "observatory_ready")
+        end
+    end
+end
+
+function plugin_manager.update(dt)
+    http_service.update(dt)
+    for _, p in ipairs(plugins) do
+        if not disabled[p.id] then
+            method_call(p, "update", dt)
         end
     end
 end

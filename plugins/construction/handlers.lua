@@ -50,7 +50,12 @@ local function resolved_station(market_id, existing)
     return nil, nil
 end
 
+local function on_position(entry)
+    state.record_system_position(entry.StarSystem, entry.StarPos)
+end
+
 local function on_station_visit(entry)
+    on_position(entry)
     if not entry.MarketID then return end
     state.record_station(tostring(entry.MarketID),
         entry.StationName, entry.StarSystem)
@@ -66,13 +71,15 @@ local function on_construction_depot(entry)
     local station_name, system_name = resolved_station(market_id,
         state.get_site(market_id))
     state.upsert_site(market_id, {
-        market_id    = market_id,
-        station_name = station_name,
-        system_name  = system_name,
-        label        = station_label(station_name, system_name)
+        market_id     = market_id,
+        station_name  = station_name,
+        system_name   = system_name,
+        system_coords = system_name and state.coords_for_system(system_name)
+            or nil,
+        label         = station_label(station_name, system_name)
             or (constants.UNKNOWN_SITE_PREFIX .. market_id),
-        progress     = entry.ConstructionProgress,
-        resources    = build_resources(entry.ResourcesRequired),
+        progress      = entry.ConstructionProgress,
+        resources     = build_resources(entry.ResourcesRequired),
     })
 end
 
@@ -92,6 +99,8 @@ end
 local DISPATCH_TABLE = {
     Docked                        = on_station_visit,
     Location                      = on_station_visit,
+    FSDJump                       = on_position,
+    CarrierJump                   = on_station_visit,
     ColonisationConstructionDepot = on_construction_depot,
     Cargo                         = on_cargo,
     CargoFile                     = on_cargo,

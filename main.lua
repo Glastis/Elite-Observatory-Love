@@ -4,6 +4,7 @@
 
 local settings        = require("observatory.settings")
 local log_monitor     = require("observatory.log_monitor")
+local http_service    = require("observatory.http_service")
 local plugin_manager  = require("observatory.plugin_manager")
 local audio_handler   = require("observatory.audio_handler")
 local core_form       = require("observatory.ui.core_form")
@@ -76,6 +77,7 @@ function love.load(args)
     settings.load()
 
     log_monitor.init()
+    http_service.start()
     plugin_manager.load_all()
 
     if settings.get("StartReadAll") then
@@ -94,6 +96,7 @@ function love.update(dt)
     -- love.draw (animations advance in lockstep with input edges).
     ui_input.begin(dt)
     log_monitor.update(dt)
+    plugin_manager.update(dt)
     audio_handler.update(dt)
 end
 
@@ -127,5 +130,6 @@ function love.keypressed(key)
 end
 
 function love.quit()
+    http_service.shutdown()
     settings.save()
 end
