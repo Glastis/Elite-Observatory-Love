@@ -3,6 +3,7 @@
 -- discover and load plugins, then hand off to the UI.
 
 local settings        = require("observatory.settings")
+local debug_mode      = require("observatory.debug_mode")
 local log_monitor     = require("observatory.log_monitor")
 local http_service    = require("observatory.http_service")
 local plugin_manager  = require("observatory.plugin_manager")
@@ -16,11 +17,14 @@ function love.load(args)
     local smoke = false
     local journal_override
     local run_tests = false
+    local is_debug = false
     for i, a in ipairs(args or {}) do
         if a == "--smoke" then smoke = true
         elseif a == "--test" then run_tests = true
+        elseif a == "--debug" then is_debug = true
         elseif a == "--journal" then journal_override = args[i + 1] end
     end
+    debug_mode.set(is_debug)
 
     if run_tests then
         local loader = loadfile("tests/run.lua")

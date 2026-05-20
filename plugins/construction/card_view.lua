@@ -47,6 +47,10 @@ local STOP_RESOURCE_H = 16
 local COPY_FEEDBACK_S = 1.6
 local STOP_DONE_BG    = { 0.07, 0.16, 0.10, 1 }
 
+local ROUTE_WHEEL_STEP      = 40
+local ROUTE_SCROLLBAR_W     = 3
+local ROUTE_SCROLLBAR_MIN_H = 20
+
 local MENU_BTN_W       = 24
 local MENU_BTN_GAP     = 6
 local MENU_DOT_RADIUS  = 1.6
@@ -161,7 +165,7 @@ local function build_card(market_id, site, is_hidden)
         title        = site.label or (constants.UNKNOWN_SITE_PREFIX .. market_id),
         progress     = site.progress or 0,
         resources    = amounts.unfinished(site),
-        route        = route_state.preview(market_id, ROUTE_MAX_STOPS),
+        route        = route_state.preview(market_id),
         needed_total = needed_total,
         cargo_total  = cargo_total,
         to_buy_total = to_buy_total,
@@ -207,6 +211,18 @@ local function route_stops_height(stops)
     return total
 end
 
+local function visible_stop_count(stops)
+    return math.min(ROUTE_MAX_STOPS, #stops)
+end
+
+local function route_viewport_height(stops)
+    local total = 0
+    for index = 1, visible_stop_count(stops) do
+        total = total + STOP_CARD_GAP + stop_card_height(stops[index])
+    end
+    return total
+end
+
 local function route_body_h(card)
     if route_status_of(card) ~= route_constants.STATUS_READY then
         return ROUTE_HEADER_H + ROUTE_MESSAGE_H
@@ -214,7 +230,7 @@ local function route_body_h(card)
     if #card.route.stops == 0 then
         return ROUTE_HEADER_H + ROUTE_MESSAGE_H
     end
-    return ROUTE_HEADER_H + route_stops_height(card.route.stops)
+    return ROUTE_HEADER_H + route_viewport_height(card.route.stops)
 end
 
 local function body_height(card)
@@ -551,15 +567,20 @@ local function draw_stop_fade(x, y, w, h, fade)
     love.graphics.rectangle("fill", x, y, w, h)
 end
 
-local function draw_stop_card(stop, view_state, x, y, w, fade, green)
+local function is_stop_clipped(y, h, bounds)
+    return bounds ~= nil and (y < bounds.top or y + h > bounds.bottom)
+end
+
+local function draw_stop_card(stop, view_state, x, y, w, fade, green, bounds)
     fade = fade or 1
     green = green or 0
     local h = stop_card_height(stop)
+    local is_locked = green > 0 or is_stop_clipped(y, h, bounds)
     panel.draw(x, y, w, h, stop_panel_opts(green))
     local inner_x = x + STOP_CARD_PAD_X
     local inner_w = w - STOP_CARD_PAD_X * 2
     local cy = y + STOP_CARD_PAD_Y
-    draw_stop_system(stop, view_state, inner_x, cy, inner_w, green > 0)
+    draw_stop_system(stop, view_state, inner_x, cy, inner_w, is_locked)
     cy = cy + STOP_SYSTEM_H
     draw_stop_station(stop, inner_x, cy, inner_w)
     cy = cy + STOP_STATION_H
@@ -596,17 +617,63 @@ local function draw_route_message(message, color_key, x, y, w)
     })
 end
 
+local function clamp(value, lo, hi)
+    return math.max(lo, math.min(hi, value))
+end
+
+local function route_scroll(view_state, market_id)
+    view_state.route_scroll = view_state.route_scroll or {}
+    return view_state.route_scroll[market_id] or 0
+end
+
+local function set_route_scroll(view_state, market_id, value)
+    view_state.route_scroll = view_state.route_scroll or {}
+    view_state.route_scroll[market_id] = value
+end
+
+local function handle_route_wheel(view_state, market_id, max_scroll, x, y, w, h)
+    if not input.in_rect(x, y, w, h) then return end
+    if max_scroll <= 0 then return end
+    view_state.route_wheel_market = market_id
+    if input.wheel_dy == 0 then return end
+    local scrolled = route_scroll(view_state, market_id)
+        - input.wheel_dy * ROUTE_WHEEL_STEP
+    set_route_scroll(view_state, market_id, clamp(scrolled, 0, max_scroll))
+end
+
+local function draw_route_scrollbar(x, y, w, h, content_h, scroll, max_scroll)
+    if max_scroll <= 0 then return end
+    local bar_h = math.max(ROUTE_SCROLLBAR_MIN_H, h * h / content_h)
+    local bar_y = y + (h - bar_h) * (scroll / max_scroll)
+    love.graphics.setColor(theme.colors.rule_strong)
+    love.graphics.rectangle("fill",
+        x + w - ROUTE_SCROLLBAR_W, bar_y, ROUTE_SCROLLBAR_W, bar_h)
+end
+
 local function draw_route_stops(card, view_state, x, y, w)
-    route_anim.run(view_state, card.market_id, card.route.stops, x, y, w, {
+    local stops = card.route.stops
+    local view_h = route_viewport_height(stops)
+    local content_h = route_stops_height(stops)
+    local max_scroll = math.max(0, content_h - view_h)
+    handle_route_wheel(view_state, card.market_id, max_scroll, x, y, w, view_h)
+    local scroll = clamp(route_scroll(view_state, card.market_id), 0, max_scroll)
+    set_route_scroll(view_state, card.market_id, scroll)
+    local bounds = { top = y, bottom = y + view_h }
+    local prev_scissor = { love.graphics.getScissor() }
+    love.graphics.intersectScissor(x, y, w, view_h)
+    route_anim.run(view_state, card.market_id, stops, x, y, w, {
         gap         = STOP_CARD_GAP,
         stop_height = stop_card_height,
         draw_stop   = function(stop, sx, sy, sw, fade, green)
-            draw_stop_card(stop, view_state, sx, sy, sw, fade, green)
+            draw_stop_card(stop, view_state, sx, sy - scroll, sw,
+                fade, green, bounds)
         end,
         prune       = function(stop_id)
             route_state.prune_stop(card.market_id, stop_id)
         end,
     })
+    love.graphics.setScissor(unpack(prev_scissor))
+    draw_route_scrollbar(x, y, w, view_h, content_h, scroll, max_scroll)
 end
 
 local function draw_route_body(card, view_state, x, y, w)
@@ -729,7 +796,11 @@ function CARD_VIEW.draw(view_state, x, y, w, h, show_hidden)
         max_columns   = MAX_COLUMNS,
         empty_message = empty_message_for(),
         empty_font    = font_for(FONT_EMPTY),
-        build_cards   = function() return build_cards(show_hidden) end,
+        wheel_locked  = function(state) return state.route_wheel_market ~= nil end,
+        build_cards   = function()
+            view_state.route_wheel_market = nil
+            return build_cards(show_hidden)
+        end,
         card_height   = card_height,
         draw_card     = function(card, cx, cy, cw, ch)
             return draw_card(card, cx, cy, cw, ch, view_state)

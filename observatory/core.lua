@@ -12,6 +12,7 @@ local log_monitor = require("observatory.log_monitor")
 local paths = require("observatory.paths")
 local plugin_helpers = require("observatory.plugin_helpers")
 local error_channel = require("observatory.error_channel")
+local debug_mode = require("observatory.debug_mode")
 
 local Core = {}
 Core.__index = Core
@@ -64,6 +65,15 @@ end
 
 function Core:is_log_monitor_batch_reading()
     return log_monitor.is_batch_read()
+end
+
+function Core:refresh_ancillary_state()
+    log_monitor.refresh_ancillary_state()
+end
+
+-- Debug -------------------------------------------------------------------
+function Core:is_debug()
+    return debug_mode.is_enabled()
 end
 
 -- Audio -------------------------------------------------------------------

@@ -91,6 +91,63 @@ do
     eq(log_monitor.STATE.PreRead, 4, "PreRead")
 end
 
+-- log_monitor: a finished batch read seeds the current ancillary state -----
+do
+    local log_monitor = require("observatory.log_monitor")
+    local state_flags = require("observatory.log_monitor.state_flags")
+
+    local dir = "/tmp/observatory-test-journal-" .. tostring(os.time())
+    os.execute('mkdir -p "' .. dir .. '"')
+    local cargo = io.open(dir .. "/Cargo.json", "w")
+    cargo:write('{"timestamp":"2026-05-19T18:00:00Z","event":"Cargo",'
+        .. '"Vessel":"Ship","Count":3,'
+        .. '"Inventory":[{"Name":"steel","Count":3,"Stolen":0}]}')
+    cargo:close()
+
+    log_monitor.clear_listeners()
+    local timeline = {}
+    log_monitor.on_journal_entry(function(entry)
+        table.insert(timeline, { kind = "entry", entry = entry })
+    end)
+    log_monitor.on_state_changed(function(change)
+        table.insert(timeline, { kind = "state", current = change.current })
+    end)
+
+    log_monitor.change_watched_directory(dir)
+    log_monitor.read_all({ blocking = true })
+
+    local cargo_file, cargo_file_index, realtime_ready_index
+    local index = 1
+    while timeline[index] do
+        local item = timeline[index]
+        if item.kind == "entry" and item.entry.event == "CargoFile" then
+            cargo_file = item.entry
+            cargo_file_index = index
+        end
+        if item.kind == "state"
+                and not state_flags.is_batch_read(item.current)
+                and not realtime_ready_index then
+            realtime_ready_index = index
+        end
+        index = index + 1
+    end
+
+    truthy(cargo_file,
+        "a finished batch read dispatches the Cargo.json snapshot")
+    truthy(cargo_file and cargo_file.Inventory,
+        "the CargoFile snapshot carries the cargo inventory")
+    eq(cargo_file and cargo_file.Inventory[1].Name, "steel",
+        "the snapshot reports the commodity held in the hold")
+    truthy(cargo_file_index and realtime_ready_index
+        and cargo_file_index < realtime_ready_index,
+        "the hold is refreshed before the batch flag clears, so routes "
+        .. "recompute against current cargo")
+
+    log_monitor.clear_listeners()
+    os.remove(dir .. "/Cargo.json")
+    os.remove(dir)
+end
+
 -- evaluator: body_value ---------------------------------------------------
 do
     local body_value = require("observatory.plugin_helpers.body_value")
@@ -1588,6 +1645,7 @@ do
             end,
             http_cancel = function() end,
             is_log_monitor_batch_reading = function() return false end,
+            is_debug = function() return false end,
         }
     end
 
@@ -1634,10 +1692,308 @@ do
         },
     }, {})
     local delivered = route_state.get(MARKET)
-    truthy(delivered.stops[1].is_completed,
-        "delivering a full bulk load completes the first route stop")
-    eq(delivered.stops[2].is_completed, nil,
-        "the leftover stop waits until its own commodity is delivered")
+    eq(delivered.total_stops, 1,
+        "a delivery recomputes the route around what is left to buy")
+    eq(delivered.stops[1].kind, "multi",
+        "the 50 t leftover fits inside a single multi stop")
+    eq(delivered.stops[1].pickups[1].quantity, 50,
+        "the recomputed pickup reflects required minus provided")
+end
+
+-- construction: route demand tracks the live cargo snapshot ---------------
+do
+    local json                  = require("lib.json")
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+    local route_state           = require("plugins.construction.route_state")
+    local route_cache           = require("plugins.construction.route_cache")
+    local route_service         = require("plugins.construction.route_service")
+
+    construction_state.reset()
+    route_state.reset()
+    route_cache.reset()
+    construction_state.set_on_site_updated(route_service.on_site_updated)
+
+    local MARKET = "depot-cargo"
+    local exports_body = json.encode({
+        { stationName = "Foundry", systemName = "Forge",
+          systemX = 10, systemY = 0, systemZ = 0,
+          stationType = "Coriolis", maxLandingPadSize = 3,
+          buyPrice = 50, stock = 100000, distanceToArrival = 120,
+          fleetCarrier = 0 },
+    })
+    local function fake_core()
+        local request_id = 0
+        return {
+            http_get = function(_, _, callback)
+                request_id = request_id + 1
+                callback({ is_ok = true, status = 200, body = exports_body })
+                return request_id
+            end,
+            http_cancel = function() end,
+            is_log_monitor_batch_reading = function() return false end,
+            is_debug = function() return false end,
+        }
+    end
+
+    local function route_pickup_total(market_id, commodity_key)
+        local route = route_state.get(market_id)
+        local total = 0
+        for _, stop in ipairs((route and route.stops) or {}) do
+            for _, pickup in ipairs(stop.pickups or {}) do
+                if pickup.commodity_key == commodity_key then
+                    total = total + pickup.quantity
+                end
+            end
+        end
+        return total
+    end
+
+    construction_handlers.dispatch({
+        event = "Location", MarketID = MARKET,
+        StationName = "Site", StarSystem = "Depot", StarPos = { 0, 0, 0 },
+    }, {})
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.6, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 1000, ProvidedAmount = 600 },
+        },
+    }, {})
+
+    route_service.init(fake_core())
+    route_service.set_ship_params({
+        cargo_capacity = "200", jump_loaded = "20", jump_unloaded = "30",
+    })
+
+    construction_handlers.dispatch({
+        event = "Cargo", Vessel = "Ship",
+        Inventory = { { Name = "steel", Count = 600 } },
+    }, {})
+    route_service.compute_for_site(MARKET, true)
+    eq(route_pickup_total(MARKET, "steel"), 0,
+        "a stale hold still claiming the delivered load empties the route")
+
+    construction_handlers.dispatch({
+        event = "CargoFile", Vessel = "Ship", Inventory = {},
+    }, {})
+    route_service.compute_for_site(MARKET, true)
+    eq(route_pickup_total(MARKET, "steel"), 400,
+        "the Cargo.json snapshot restores the full outstanding requirement")
+    eq(#route_state.get(MARKET).unsatisfiable, 0,
+        "a fully stocked commodity stays satisfiable")
+
+    construction_handlers.dispatch({
+        event = "CargoFile", Vessel = "Ship",
+        Inventory = { { Name = "steel", Count = 150 } },
+    }, {})
+    route_service.compute_for_site(MARKET, true)
+    eq(route_pickup_total(MARKET, "steel"), 250,
+        "cargo genuinely in the hold is subtracted from the route exactly once")
+end
+
+-- log_monitor: refresh_ancillary_state is a public on-demand snapshot ----
+do
+    local log_monitor = require("observatory.log_monitor")
+
+    local dir = "/tmp/observatory-test-snapshot-" .. tostring(os.time())
+    os.execute('mkdir -p "' .. dir .. '"')
+    local cargo = io.open(dir .. "/Cargo.json", "w")
+    cargo:write('{"timestamp":"2026-05-19T18:00:00Z","event":"Cargo",'
+        .. '"Vessel":"Ship","Count":7,'
+        .. '"Inventory":[{"Name":"titanium","Count":7,"Stolen":0}]}')
+    cargo:close()
+
+    log_monitor.clear_listeners()
+    log_monitor.change_watched_directory(dir)
+
+    local captured = {}
+    log_monitor.on_journal_entry(function(entry)
+        if entry.event == "CargoFile" then captured[#captured + 1] = entry end
+    end)
+
+    log_monitor.refresh_ancillary_state()
+    eq(#captured, 1,
+        "an on-demand refresh dispatches a CargoFile entry to listeners")
+    eq(captured[1] and captured[1].Inventory[1].Name, "titanium",
+        "the dispatched entry mirrors the on-disk Cargo.json")
+    eq(captured[1] and captured[1].Inventory[1].Count, 7,
+        "the dispatched entry carries the current hold quantity")
+
+    log_monitor.clear_listeners()
+    os.remove(dir .. "/Cargo.json")
+    os.remove(dir)
+end
+
+-- construction: a depot event triggers a cargo snapshot -------------------
+do
+    package.preload["utf8"] = package.preload["utf8"] or function()
+        return {
+            len    = function(s) return #s end,
+            char   = function(cp) return string.char(cp) end,
+            codes  = function(s)
+                local index = 0
+                return function()
+                    index = index + 1
+                    if index > #s then return nil end
+                    return index, string.byte(s, index)
+                end
+            end,
+            offset = function(_, position) return position end,
+            charpattern = ".",
+        }
+    end
+
+    local log_monitor        = require("observatory.log_monitor")
+    local construction_state = require("plugins.construction.state")
+    local route_state        = require("plugins.construction.route_state")
+    local Plugin             = require("plugins.construction.init")
+
+    local dir = "/tmp/observatory-test-depot-trigger-" .. tostring(os.time())
+    os.execute('mkdir -p "' .. dir .. '"')
+    local cargo = io.open(dir .. "/Cargo.json", "w")
+    cargo:write('{"timestamp":"2026-05-19T18:00:00Z","event":"Cargo",'
+        .. '"Vessel":"Ship","Count":3,'
+        .. '"Inventory":[{"Name":"steel","Count":3,"Stolen":0}]}')
+    cargo:close()
+
+    construction_state.reset()
+    route_state.reset()
+    log_monitor.clear_listeners()
+    log_monitor.change_watched_directory(dir)
+
+    local fake_core = {
+        bind_state = function(_, plugin, defaults)
+            for key, value in pairs(defaults) do plugin[key] = value end
+        end,
+        save_state = function() end,
+        is_debug = function() return false end,
+        is_log_monitor_batch_reading = function() return false end,
+        refresh_ancillary_state = function()
+            log_monitor.refresh_ancillary_state()
+        end,
+    }
+
+    Plugin:load(fake_core)
+    log_monitor.on_journal_entry(function(entry) Plugin:journal_event(entry) end)
+
+    construction_state.set_cargo({ steel = 999 })
+    eq(construction_state.cargo_count("steel"), 999,
+        "the hold starts on a stale value left over from before delivery")
+
+    Plugin:journal_event({
+        event = "ColonisationConstructionDepot",
+        MarketID = "depot-refresh",
+        ConstructionProgress = 0.5, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 100, ProvidedAmount = 50 },
+        },
+    })
+
+    eq(construction_state.cargo_count("steel"), 3,
+        "a depot event refreshes the hold from Cargo.json before the demand is rebuilt")
+
+    log_monitor.clear_listeners()
+    os.remove(dir .. "/Cargo.json")
+    os.remove(dir)
+end
+
+-- construction: route recomputes after stale-cargo delivery ---------------
+do
+    local json                  = require("lib.json")
+    local log_monitor           = require("observatory.log_monitor")
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+    local route_state           = require("plugins.construction.route_state")
+    local route_cache           = require("plugins.construction.route_cache")
+    local route_service         = require("plugins.construction.route_service")
+
+    local dir = "/tmp/observatory-test-stale-cargo-" .. tostring(os.time())
+    os.execute('mkdir -p "' .. dir .. '"')
+    local cargo_file = io.open(dir .. "/Cargo.json", "w")
+    cargo_file:write('{"timestamp":"2026-05-19T18:00:00Z","event":"Cargo",'
+        .. '"Vessel":"Ship","Count":0,"Inventory":[]}')
+    cargo_file:close()
+
+    construction_state.reset()
+    route_state.reset()
+    route_cache.reset()
+    log_monitor.clear_listeners()
+    log_monitor.change_watched_directory(dir)
+    log_monitor.on_journal_entry(function(entry)
+        construction_handlers.dispatch(entry, {})
+    end)
+    construction_state.set_on_site_updated(route_service.on_site_updated)
+
+    local MARKET = "stale-cargo-market"
+    local exports_body = json.encode({
+        { stationName = "Titanium Mill", systemName = "Forge",
+          systemX = 5, systemY = 0, systemZ = 0,
+          stationType = "Coriolis", maxLandingPadSize = 3,
+          buyPrice = 100, stock = 100000, distanceToArrival = 120,
+          fleetCarrier = 0 },
+    })
+    local fake_core = {
+        http_get = function(_, _, callback)
+            callback({ is_ok = true, status = 200, body = exports_body })
+            return 1
+        end,
+        http_cancel = function() end,
+        is_log_monitor_batch_reading = function() return false end,
+        is_debug = function() return false end,
+        refresh_ancillary_state = function()
+            log_monitor.refresh_ancillary_state()
+        end,
+    }
+
+    construction_handlers.dispatch({
+        event = "Location", MarketID = MARKET,
+        StationName = "Site Alpha", StarSystem = "Depot",
+        StarPos = { 0, 0, 0 },
+    }, {})
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.1, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$titanium_name;", Name_Localised = "Titanium",
+              RequiredAmount = 1373, ProvidedAmount = 0 },
+        },
+    }, {})
+
+    construction_state.set_cargo({ titanium = 1280 })
+    eq(construction_state.cargo_count("titanium"), 1280,
+        "the hold starts on a stale value still claiming the loaded titanium")
+
+    route_service.init(fake_core)
+    route_service.set_ship_params({
+        cargo_capacity = "976", jump_loaded = "20", jump_unloaded = "30",
+    })
+
+    route_service.compute_for_site(MARKET, true)
+
+    local route = route_state.get(MARKET)
+    truthy(route, "compute_for_site produces a route entry")
+    eq(route and route.status, "ready", "the route reaches ready status")
+
+    local bulk_titanium_count = 0
+    for _, stop in ipairs((route and route.stops) or {}) do
+        if stop.kind == "bulk" then
+            for _, pickup in ipairs(stop.pickups or {}) do
+                if pickup.commodity_key == "titanium"
+                    and pickup.quantity == 976 then
+                    bulk_titanium_count = bulk_titanium_count + 1
+                end
+            end
+        end
+    end
+    truthy(bulk_titanium_count >= 1,
+        "a stale-cargo state must not erase the full titanium bulk trip")
+
+    log_monitor.clear_listeners()
+    os.remove(dir .. "/Cargo.json")
+    os.remove(dir)
 end
 
 print(string.format("\n%d tests, %d failures", total, failures))

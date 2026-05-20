@@ -133,20 +133,40 @@ function log_monitor.change_watched_directory(path)
     settings.save()
 end
 
+local function read_ancillary_file(fname)
+    if not state.journal_folder then return nil end
+    local apath = paths.join(state.journal_folder, fname)
+    local af = io.open(apath, "rb")
+    if not af then return nil end
+    local content = af:read("*a") or ""
+    af:close()
+    return content
+end
+
+local function dispatch_ancillary(event_name, fname)
+    local content = read_ancillary_file(fname)
+    if not content then return end
+    local parsed = journal_reader.deserialize(content)
+    if parsed.event == INVALID_JSON_EVENT then return end
+    parsed.event = event_name .. "File"
+    dispatch("journal_entry", parsed)
+end
+
 local function dispatch_ancillary_for(entry)
     if log_monitor.is_batch_read() then return end
     local fname = ANCILLARY_EVENTS[entry.event]
-    if not fname or not state.journal_folder then return end
-    local apath = paths.join(state.journal_folder, fname)
-    local af = io.open(apath, "rb")
-    if not af then return end
-    local content = af:read("*a") or ""
-    af:close()
-    local parsed = journal_reader.deserialize(content)
-    if parsed.event == INVALID_JSON_EVENT then return end
-    parsed.event = entry.event .. "File"
-    dispatch("journal_entry", parsed)
+    if fname then dispatch_ancillary(entry.event, fname) end
 end
+
+local function dispatch_ancillary_snapshot()
+    local event_name = next(ANCILLARY_EVENTS)
+    while event_name do
+        dispatch_ancillary(event_name, ANCILLARY_EVENTS[event_name])
+        event_name = next(ANCILLARY_EVENTS, event_name)
+    end
+end
+
+log_monitor.refresh_ancillary_state = dispatch_ancillary_snapshot
 
 local function process_entry(entry)
     state.last_event = entry.event or UNKNOWN_EVENT
@@ -176,6 +196,7 @@ local function run_preread()
     if #files > 0 then
         process_lines(preread.collect(state, files), "Pre-read")
     end
+    dispatch_ancillary_snapshot()
     set_state(state_flags.clear_flag(state.current_state, state_flags.STATE.PreRead))
 end
 
@@ -198,6 +219,7 @@ end
 
 local function finish_batch()
     state.batch_pool = nil
+    dispatch_ancillary_snapshot()
     set_state(state_flags.clear_flag(state.current_state, state_flags.STATE.Batch))
 end
 

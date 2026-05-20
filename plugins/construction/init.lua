@@ -19,6 +19,10 @@ local SHOW_HIDDEN_BUTTON = {
     flag   = "is_show_hidden",
 }
 
+local CARGO_REFRESH_TRIGGERS = {
+    ColonisationConstructionDepot = true,
+}
+
 local Plugin = {
     id         = "construction",
     name       = "Construction Tracker",
@@ -47,6 +51,9 @@ function Plugin:load(core)
 end
 
 function Plugin:journal_event(entry)
+    if entry and CARGO_REFRESH_TRIGGERS[entry.event] and core_ref then
+        core_ref:refresh_ancillary_state()
+    end
     handlers.dispatch(entry, self.settings)
 end
 

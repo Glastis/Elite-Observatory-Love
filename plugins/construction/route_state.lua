@@ -60,7 +60,8 @@ function route_state.preview(market_id, count)
     if not route then return nil end
     local stops = {}
     local available = route.stops or {}
-    for index = 1, math.min(count, #available) do
+    local limit = count and math.min(count, #available) or #available
+    for index = 1, limit do
         stops[index] = available[index]
     end
     return {

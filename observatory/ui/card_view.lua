@@ -120,7 +120,9 @@ function card_view.draw(view_state, x, y, w, h, opts)
     local scrollbar_reserve = opts.scrollbar_reserve or DEFAULT_SCROLLBAR_RESERVE
     local content_w = w - scrollbar_reserve
 
-    handle_wheel(view_state, x, y, w, h, wheel_step)
+    if not (opts.wheel_locked and opts.wheel_locked(view_state)) then
+        handle_wheel(view_state, x, y, w, h, wheel_step)
+    end
 
     local cards = opts.build_cards()
     if #cards == 0 then

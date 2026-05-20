@@ -6,6 +6,7 @@ local route_api       = require("plugins.construction.route_api")
 local route_cache     = require("plugins.construction.route_cache")
 local route_planner   = require("plugins.construction.route_planner")
 local route_consumption = require("plugins.construction.route_consumption")
+local route_debug     = require("plugins.construction.route_debug")
 local commodity_names = require("plugins.construction.commodity_names")
 
 local route_service = {}
@@ -95,6 +96,8 @@ local function finish_fetch(fetch)
     route_state.clear_in_flight(fetch.market_id)
     local site = state.get_site(fetch.market_id)
     if not site then return route_state.remove(fetch.market_id) end
+    route_debug.record_sources(fetch.market_id, fetch.system_name,
+        fetch.depot_coords, fetch.sources_by_key, fetch.displays)
     if fetch.success_count <= 0 then
         return route_state.set_status(fetch.market_id, constants.STATUS_ERROR)
     end
@@ -178,10 +181,12 @@ end
 function route_service.init(core)
     core_ref = core
     route_cache.init()
+    route_debug.set_enabled(core:is_debug())
 end
 
 function route_service.update(dt)
     route_cache.update(dt)
+    route_debug.update(dt)
 end
 
 function route_service.set_ship_params(params)
@@ -190,6 +195,9 @@ end
 
 function route_service.compute_for_site(market_id, is_forced)
     if not core_ref then return end
+    if core_ref.refresh_ancillary_state then
+        core_ref:refresh_ancillary_state()
+    end
     local site = state.get_site(market_id)
     if not site or not site.system_name then return end
     if route_state.in_flight_handle(market_id) then
@@ -232,6 +240,7 @@ end
 function route_service.on_site_removed(market_id)
     cancel_in_flight(market_id)
     route_state.remove(market_id)
+    route_debug.forget(market_id)
     delivered_baseline[market_id] = nil
 end
 
@@ -248,6 +257,7 @@ function route_service.on_site_updated(market_id)
     if next(delta) then
         route_consumption.apply(route, delta)
     end
+    route_service.compute_for_site(market_id, true)
 end
 
 function route_service.on_monitor_state_changed()

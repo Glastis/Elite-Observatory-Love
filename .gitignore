@@ -5,6 +5,7 @@
 /build/
 /dist/
 *.log
+/construction_debug_*.json
 /core
 /core.[0-9]*
 tmp.png
