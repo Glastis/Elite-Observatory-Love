@@ -39,18 +39,20 @@ local function prefer_orbital(sources)
     return surface
 end
 
-local function sources_in_range(sources, depot_coords)
+local function sources_in_range(sources, depot_coords, max_distance_ly)
     local kept
     local index
     local source
     local distance
+    local limit
 
+    limit = max_distance_ly or constants.MAX_SOURCE_DISTANCE_LY
     kept = {}
     index = 1
     while sources[index] do
         source = sources[index]
         distance = route_distance.between(source.coords, depot_coords)
-        if distance and distance <= constants.MAX_SOURCE_DISTANCE_LY then
+        if distance and distance <= limit then
             table.insert(kept, source)
         end
         index = index + 1
@@ -58,14 +60,15 @@ local function sources_in_range(sources, depot_coords)
     return kept
 end
 
-local function filter_in_range(sources_by_key, depot_coords)
+local function filter_in_range(sources_by_key, depot_coords, max_distance_ly)
     local result
     local commodity_key
 
     result = {}
     commodity_key = next(sources_by_key)
     while commodity_key do
-        result[commodity_key] = sources_in_range(sources_by_key[commodity_key], depot_coords)
+        result[commodity_key] = sources_in_range(sources_by_key[commodity_key],
+            depot_coords, max_distance_ly)
         commodity_key = next(sources_by_key, commodity_key)
     end
     return result
@@ -168,7 +171,8 @@ function market.survey(plan_input)
     local sources
     local unsatisfiable
 
-    in_range = filter_in_range(plan_input.sources_by_key, plan_input.depot_coords)
+    in_range = filter_in_range(plan_input.sources_by_key,
+        plan_input.depot_coords, plan_input.max_distance_ly)
     sources, unsatisfiable = select_sources(in_range, plan_input.demand)
     return {
         ship          = plan_input.ship,

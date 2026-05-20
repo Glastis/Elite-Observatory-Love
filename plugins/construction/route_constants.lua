@@ -30,4 +30,6 @@ return {
     STATION_KEY_SEPARATOR = "||",
     BULK_STOP_KIND        = "bulk",
     MULTI_STOP_KIND       = "multi",
+
+    AGGRESSIVE_WORKER_COUNT = 8,
 }

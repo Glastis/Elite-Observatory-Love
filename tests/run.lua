@@ -1559,6 +1559,188 @@ do
         "leftover multi-commodity stops trail the easy full loads")
 end
 
+-- construction: aggressive brute-force planner ---------------------------
+do
+    local market_module = require("plugins.construction.route_planner.market")
+    local bruteforce    = require("plugins.construction.route_planner.bruteforce")
+    local refined       = require("plugins.construction.route_planner.refined")
+
+    local function source(name, system, x, price, stock, is_orbital)
+        return {
+            station_name = name, system_name = system,
+            coords = { x = x, y = 0, z = 0 },
+            distance_to_arrival_ls = 100,
+            is_orbital = is_orbital ~= false,
+            price = price, stock = stock,
+        }
+    end
+
+    local function pickup_total(routes)
+        local total = 0
+        for _, trip in ipairs(routes) do
+            for _, stop in ipairs(trip.stops) do
+                total = total + (stop.total or 0)
+            end
+        end
+        return total
+    end
+
+    local ship  = { cargo_capacity = 100, jump_range_loaded = 30,
+                    jump_range_unloaded = 50 }
+    local depot = { x = 0, y = 0, z = 0 }
+
+    local survey_input = {
+        demand   = { alpha = 10, beta = 10 },
+        displays = { alpha = "Alpha", beta = "Beta" },
+        sources_by_key = {
+            alpha = { source("Hub",     "Mid",   30, 10, 100) },
+            beta  = { source("Faraway", "Wide",  40, 10, 100) },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    }
+
+    local function fresh_survey()
+        return market_module.survey(survey_input)
+    end
+
+    local bf_market = fresh_survey()
+    local bf_routes, bf_jumps = bruteforce.find(bf_market)
+    truthy(bf_routes and #bf_routes >= 1,
+        "bruteforce returns at least one trip when demand is satisfiable")
+    eq(pickup_total(bf_routes), 20,
+        "bruteforce satisfies the full demand across its trips")
+    eq(#bf_market.unsatisfiable, 0,
+        "bruteforce reports no unsatisfiable commodities when all are reachable")
+
+    local greedy_market = fresh_survey()
+    local greedy_routes = refined.find(greedy_market)
+    local greedy_total = 0
+    for _, trip in ipairs(greedy_routes) do
+        local cursor = depot
+        local laden = ship.jump_range_unloaded
+        for _, stop in ipairs(trip.stops) do
+            local dx = stop.station.coords.x - cursor.x
+            greedy_total = greedy_total + math.max(1,
+                math.ceil(math.abs(dx) / laden))
+            cursor = stop.station.coords
+            laden = ship.jump_range_loaded
+        end
+        local last = trip.stops[#trip.stops].station.coords
+        greedy_total = greedy_total + math.max(1,
+            math.ceil(math.abs(last.x) / ship.jump_range_loaded))
+    end
+    truthy(bf_jumps <= greedy_total,
+        "bruteforce never returns a route with more jumps than the greedy")
+
+    local unreachable_market = market_module.survey({
+        demand   = { rare = 5 },
+        displays = { rare = "Rare" },
+        sources_by_key = {
+            rare = { source("FarRare", "FarSys", 600, 5, 5000) },
+        },
+        depot_coords = depot, origin_coords = depot, ship = ship,
+    })
+    local unreachable_routes = bruteforce.find(unreachable_market)
+    eq(#unreachable_routes, 0,
+        "bruteforce returns no trips when nothing is in range")
+    eq(unreachable_market.unsatisfiable[1], "rare",
+        "bruteforce reports unsatisfiable commodities like refined does")
+
+    local lex_ship  = { cargo_capacity = 100, jump_range_loaded = 5,
+                        jump_range_unloaded = 10 }
+    local lex_depot = { x = 0, y = 0, z = 0 }
+    local lex_market = market_module.survey({
+        demand   = { iks = 50, yps = 50 },
+        displays = { iks = "Iks", yps = "Yps" },
+        sources_by_key = {
+            iks = { source("A", "Asys", 1, 10, 50),
+                    source("C", "Csys", 20, 10, 50) },
+            yps = { source("B", "Bsys", 2, 10, 50),
+                    source("C", "Csys", 20, 10, 50) },
+        },
+        depot_coords = lex_depot, origin_coords = lex_depot, ship = lex_ship,
+    })
+    local lex_routes, _, lex_stops = bruteforce.find(lex_market)
+    eq(lex_stops, 1,
+        "bruteforce picks the single covering station over a cheaper two-stop route")
+    eq(#lex_routes, 1,
+        "the single covering station fits in one trip")
+    eq(lex_routes[1].stops[1].station.station_name, "C",
+        "the single covering station is the one that holds every commodity")
+end
+
+-- construction: aggressive async route service path ----------------------
+do
+    local json                  = require("lib.json")
+    local construction_state    = require("plugins.construction.state")
+    local construction_handlers = require("plugins.construction.handlers")
+    local route_state           = require("plugins.construction.route_state")
+    local route_cache           = require("plugins.construction.route_cache")
+    local route_service         = require("plugins.construction.route_service")
+
+    construction_state.reset()
+    route_state.reset()
+    route_cache.reset()
+    construction_state.set_on_site_updated(function() end)
+
+    local MARKET = "agg-market"
+    local exports_body = json.encode({
+        { stationName = "AggHub", systemName = "Adjacent",
+          systemX = 12, systemY = 0, systemZ = 0,
+          stationType = "Coriolis", maxLandingPadSize = 3,
+          buyPrice = 50, stock = 5000, distanceToArrival = 200,
+          fleetCarrier = 0 },
+    })
+
+    local function fake_core()
+        local request_id = 0
+        return {
+            http_get = function(_, _, callback)
+                request_id = request_id + 1
+                callback({ is_ok = true, status = 200, body = exports_body })
+                return request_id
+            end,
+            http_cancel                 = function() end,
+            is_log_monitor_batch_reading = function() return false end,
+            is_debug                    = function() return false end,
+        }
+    end
+
+    construction_handlers.dispatch({
+        event = "Location", MarketID = MARKET,
+        StationName = "Agg Site", StarSystem = "AggDepot",
+        StarPos = { 0, 0, 0 },
+    }, {})
+    construction_handlers.dispatch({
+        event = "ColonisationConstructionDepot", MarketID = MARKET,
+        ConstructionProgress = 0.1, ConstructionComplete = false,
+        ResourcesRequired = {
+            { Name = "$steel_name;", Name_Localised = "Steel",
+              RequiredAmount = 60, ProvidedAmount = 0 },
+        },
+    }, {})
+
+    route_service.init(fake_core())
+    route_service.set_ship_params({
+        cargo_capacity = "100", jump_loaded = "20", jump_unloaded = "30",
+    })
+    route_service.compute_for_site(MARKET, true, true)
+
+    local guard = 0
+    while route_state.get(MARKET).status ~= "ready" and guard < 200 do
+        route_service.update(0.016)
+        guard = guard + 1
+    end
+
+    local route = route_state.get(MARKET)
+    eq(route.status, "ready",
+        "aggressive refresh completes after a few update ticks")
+    truthy(route.total_stops >= 1,
+        "aggressive route includes at least one stop")
+    eq(route.stops[1].station, "AggHub",
+        "aggressive route picks the stubbed station")
+end
+
 -- construction: persistent response cache --------------------------------
 do
     local route_cache = require("plugins.construction.route_cache")
