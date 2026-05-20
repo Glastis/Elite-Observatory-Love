@@ -59,6 +59,15 @@ local function on_station_visit(entry)
     if not entry.MarketID then return end
     state.record_station(tostring(entry.MarketID),
         entry.StationName, entry.StarSystem)
+    if entry.Docked == false then
+        state.clear_docked()
+        return
+    end
+    state.set_docked(entry.StationName, entry.StarSystem)
+end
+
+local function on_undocked(_)
+    state.clear_docked()
 end
 
 local function on_construction_depot(entry)
@@ -98,6 +107,7 @@ end
 
 local DISPATCH_TABLE = {
     Docked                        = on_station_visit,
+    Undocked                      = on_undocked,
     Location                      = on_station_visit,
     FSDJump                       = on_position,
     CarrierJump                   = on_station_visit,

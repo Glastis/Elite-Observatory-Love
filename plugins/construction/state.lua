@@ -6,6 +6,7 @@ local stations = {}
 local hidden = {}
 local system_coords = {}
 local current_system_record = nil
+local current_docked = nil
 local on_change = function() end
 local on_site_added = function() end
 local on_site_removed = function() end
@@ -48,6 +49,28 @@ function state.reset()
     hidden = {}
     system_coords = {}
     current_system_record = nil
+    current_docked = nil
+end
+
+function state.set_docked(station_name, system_name)
+    if not station_name then return end
+    current_docked = { station = station_name, system = system_name }
+end
+
+function state.clear_docked()
+    current_docked = nil
+end
+
+function state.current_docked()
+    return current_docked
+end
+
+function state.is_docked_at(station_name, system_name)
+    if not current_docked then return false end
+    if current_docked.station ~= station_name then return false end
+    if system_name and current_docked.system
+        and current_docked.system ~= system_name then return false end
+    return true
 end
 
 function state.record_system_position(system_name, star_pos)

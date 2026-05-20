@@ -38,14 +38,16 @@ local ROUTE_HEADER_H     = 16
 local ROUTE_MESSAGE_H    = 24
 local ROUTE_MAX_STOPS    = route_constants.PREVIEW_STOP_COUNT
 
-local STOP_CARD_GAP   = 8
-local STOP_CARD_PAD_X = 10
-local STOP_CARD_PAD_Y = 8
-local STOP_SYSTEM_H   = 20
-local STOP_STATION_H  = 16
-local STOP_RESOURCE_H = 16
-local COPY_FEEDBACK_S = 1.6
-local STOP_DONE_BG    = { 0.07, 0.16, 0.10, 1 }
+local STOP_CARD_GAP        = 8
+local STOP_CARD_PAD_X      = 10
+local STOP_CARD_PAD_Y      = 8
+local STOP_SYSTEM_H        = 20
+local STOP_STATION_H       = 16
+local STOP_RESOURCE_H      = 16
+local COPY_FEEDBACK_S      = 1.6
+local STOP_DONE_BG         = { 0.07, 0.16, 0.10, 1 }
+local STOP_ACCENT_W        = 2
+local STOP_DOCKED_ACCENT_W = 3
 
 local ROUTE_WHEEL_STEP      = 40
 local ROUTE_SCROLLBAR_W     = 3
@@ -495,7 +497,12 @@ local function draw_truncated_name(name, spec, color, x, y, h, w)
         x, y, h, { font = font_for(spec), color = color })
 end
 
-local function draw_stop_system(stop, view_state, x, y, w, is_locked)
+local function pick_color(is_docked, docked_color, fallback)
+    if is_docked then return docked_color end
+    return fallback
+end
+
+local function draw_stop_system(stop, view_state, x, y, w, is_locked, is_docked)
     local is_hovered = not is_locked and input.in_rect(x, y, w, STOP_SYSTEM_H)
     if is_hovered then
         love.graphics.setColor(theme.colors.seg_hover)
@@ -504,7 +511,8 @@ local function draw_stop_system(stop, view_state, x, y, w, is_locked)
     local label, label_color = stop_system_label(view_state, stop)
     local label_w = draw_label_right(label, label_color, FONT_STOP_META,
         x, y, w, STOP_SYSTEM_H)
-    local name_color = is_hovered and theme.colors.accent or theme.colors.text
+    local hover_color = is_hovered and theme.colors.accent or theme.colors.text
+    local name_color = pick_color(is_docked, theme.colors.success, hover_color)
     draw_truncated_name(stop.system or "?", FONT_STOP_SYSTEM, name_color,
         x, y, STOP_SYSTEM_H, w - label_w - NUM_GAP)
     if is_locked then return end
@@ -513,27 +521,95 @@ local function draw_stop_system(stop, view_state, x, y, w, is_locked)
     end
 end
 
-local function draw_stop_station(stop, x, y, w)
+local function draw_stop_station(stop, x, y, w, is_docked)
     local meta = string.format(STOP_LS_FORMAT, fmt_ls(stop.distance_to_arrival_ls))
     local meta_w = draw_label_right(meta, theme.colors.text_faint,
         FONT_STOP_META, x, y, w, STOP_STATION_H)
+    local name_color = pick_color(is_docked, theme.colors.success,
+        theme.colors.text_dim)
     draw_truncated_name(stop.station or "?", FONT_STOP_STATION,
-        theme.colors.text_dim, x, y, STOP_STATION_H, w - meta_w - NUM_GAP)
+        name_color, x, y, STOP_STATION_H, w - meta_w - NUM_GAP)
 end
 
-local function draw_stop_pickup(pickup, x, y, w)
+local function compute_pickup_status(stops)
+    local remaining = {}
+    local status = {}
+    local stop_index = 1
+    while stops[stop_index] do
+        local stop = stops[stop_index]
+        local stop_status = {}
+        local pickups = stop.pickups or {}
+        local pickup_index = 1
+        while pickups[pickup_index] do
+            local pickup = pickups[pickup_index]
+            local key = pickup.commodity_key
+            if remaining[key] == nil then
+                remaining[key] = state.cargo_count(key)
+            end
+            local quantity = pickup.quantity or 0
+            local taken = math.min(remaining[key], quantity)
+            remaining[key] = remaining[key] - taken
+            stop_status[pickup_index] = quantity > 0 and taken >= quantity
+            pickup_index = pickup_index + 1
+        end
+        status[stop] = stop_status
+        stop_index = stop_index + 1
+    end
+    return status
+end
+
+local function append_all(target, source)
+    local index = 1
+    while source[index] do
+        table.insert(target, source[index])
+        index = index + 1
+    end
+    return target
+end
+
+local function ordered_pickup_entries(stop, status)
+    local pickups = stop.pickups or {}
+    local stop_status = (status and status[stop]) or {}
+    local pending = {}
+    local bought = {}
+    local index = 1
+    while pickups[index] do
+        local entry = {
+            pickup    = pickups[index],
+            is_bought = stop_status[index] == true,
+        }
+        if entry.is_bought then
+            table.insert(bought, entry)
+        else
+            table.insert(pending, entry)
+        end
+        index = index + 1
+    end
+    return append_all(pending, bought)
+end
+
+local function pickup_colors(is_bought)
+    if is_bought then
+        return theme.colors.success, theme.colors.success
+    end
+    return theme.colors.text, theme.colors.accent
+end
+
+local function draw_stop_pickup(entry, x, y, w)
+    local pickup = entry.pickup
+    local name_color, qty_color = pickup_colors(entry.is_bought)
     local qty = string.format(STOP_QTY_FORMAT, fmt_qty(pickup.quantity))
-    local qty_w = draw_label_right(qty, theme.colors.accent, FONT_STOP_NUMBER,
+    local qty_w = draw_label_right(qty, qty_color, FONT_STOP_NUMBER,
         x, y, w, STOP_RESOURCE_H)
     draw_truncated_name(pickup.display or pickup.commodity_key or "?",
-        FONT_STOP_RESOURCE, theme.colors.text,
+        FONT_STOP_RESOURCE, name_color,
         x, y, STOP_RESOURCE_H, w - qty_w - NUM_GAP)
 end
 
-local function draw_stop_pickups(stop, x, y, w)
+local function draw_stop_pickups(stop, x, y, w, status)
     local cy = y
-    for _, pickup in ipairs(stop.pickups or {}) do
-        draw_stop_pickup(pickup, x, cy, w)
+    for _, entry in ipairs(ordered_pickup_entries(stop, status)) do
+        draw_stop_pickup(entry, x, cy, w)
         cy = cy + STOP_RESOURCE_H
     end
 end
@@ -551,13 +627,21 @@ local function mix_color(from, to, factor)
     }
 end
 
-local function stop_panel_opts(green)
+local function stop_left_accent(green, is_docked)
+    if is_docked then
+        return theme.colors.success, STOP_DOCKED_ACCENT_W
+    end
+    return mix_color(theme.colors.accent_rule, theme.colors.success, green),
+        STOP_ACCENT_W
+end
+
+local function stop_panel_opts(green, is_docked)
+    local left, left_w = stop_left_accent(green, is_docked)
     return {
-        bg          = mix_color(theme.colors.panel_deep, STOP_DONE_BG, green),
-        border      = mix_color(theme.colors.rule, theme.colors.success, green),
-        left_accent = mix_color(theme.colors.accent_rule,
-            theme.colors.success, green),
-        left_accent_w = 2,
+        bg            = mix_color(theme.colors.panel_deep, STOP_DONE_BG, green),
+        border        = mix_color(theme.colors.rule, theme.colors.success, green),
+        left_accent   = left,
+        left_accent_w = left_w,
     }
 end
 
@@ -571,20 +655,22 @@ local function is_stop_clipped(y, h, bounds)
     return bounds ~= nil and (y < bounds.top or y + h > bounds.bottom)
 end
 
-local function draw_stop_card(stop, view_state, x, y, w, fade, green, bounds)
+local function draw_stop_card(stop, view_state, x, y, w, fade, green, bounds,
+        pickup_status)
     fade = fade or 1
     green = green or 0
     local h = stop_card_height(stop)
     local is_locked = green > 0 or is_stop_clipped(y, h, bounds)
-    panel.draw(x, y, w, h, stop_panel_opts(green))
+    local is_docked = state.is_docked_at(stop.station, stop.system)
+    panel.draw(x, y, w, h, stop_panel_opts(green, is_docked))
     local inner_x = x + STOP_CARD_PAD_X
     local inner_w = w - STOP_CARD_PAD_X * 2
     local cy = y + STOP_CARD_PAD_Y
-    draw_stop_system(stop, view_state, inner_x, cy, inner_w, is_locked)
+    draw_stop_system(stop, view_state, inner_x, cy, inner_w, is_locked, is_docked)
     cy = cy + STOP_SYSTEM_H
-    draw_stop_station(stop, inner_x, cy, inner_w)
+    draw_stop_station(stop, inner_x, cy, inner_w, is_docked)
     cy = cy + STOP_STATION_H
-    draw_stop_pickups(stop, inner_x, cy, inner_w)
+    draw_stop_pickups(stop, inner_x, cy, inner_w, pickup_status)
     draw_stop_fade(x, y, w, h, fade)
 end
 
@@ -659,6 +745,7 @@ local function draw_route_stops(card, view_state, x, y, w)
     local scroll = clamp(route_scroll(view_state, card.market_id), 0, max_scroll)
     set_route_scroll(view_state, card.market_id, scroll)
     local bounds = { top = y, bottom = y + view_h }
+    local pickup_status = compute_pickup_status(stops)
     local prev_scissor = { love.graphics.getScissor() }
     love.graphics.intersectScissor(x, y, w, view_h)
     route_anim.run(view_state, card.market_id, stops, x, y, w, {
@@ -666,7 +753,7 @@ local function draw_route_stops(card, view_state, x, y, w)
         stop_height = stop_card_height,
         draw_stop   = function(stop, sx, sy, sw, fade, green)
             draw_stop_card(stop, view_state, sx, sy - scroll, sw,
-                fade, green, bounds)
+                fade, green, bounds, pickup_status)
         end,
         prune       = function(stop_id)
             route_state.prune_stop(card.market_id, stop_id)
