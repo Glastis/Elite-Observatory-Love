@@ -12,6 +12,15 @@ local function has_threads()
     return love ~= nil and love.thread ~= nil
 end
 
+local function resolve_clock()
+    if love and love.timer and love.timer.getTime then
+        return love.timer.getTime
+    end
+    return os.clock
+end
+
+local now_seconds = resolve_clock()
+
 local function probe_processor_count()
     if love and love.system and love.system.getProcessorCount then
         return love.system.getProcessorCount() or 1
@@ -32,6 +41,7 @@ local pool = {
     worker_count    = 0,
 }
 
+local active_handles = {}
 local batch_counter = 0
 
 local function spawn_workers(count)
@@ -52,13 +62,6 @@ local function ensure_pool_started()
     spawn_workers(pool.worker_count)
     pool.is_started = true
     return true
-end
-
-local function clear_channels(count)
-    for index = 1, count do
-        pool.job_channels[index]:clear()
-        pool.result_channels[index]:clear()
-    end
 end
 
 local function copy_offers(offers)
@@ -137,6 +140,7 @@ local function dispatch_jobs(handle)
             batch_id      = handle.batch_id,
             market        = handle.market,
             root_stations = buckets[index],
+            time_budget   = constants.AGGRESSIVE_TIME_BUDGET_S,
         })
         handle.pending_workers = handle.pending_workers + 1
     end
@@ -150,14 +154,18 @@ local function worker_error()
     return nil
 end
 
-local function harvest_threaded(handle)
+local function deliver_result(result)
+    local owner = active_handles[result.batch_id]
+    if not owner then return end
+    owner.pending_workers = owner.pending_workers - 1
+    table.insert(owner.results, result)
+end
+
+local function drain_results()
     for index = 1, pool.worker_count do
         local result = pool.result_channels[index]:pop()
         while result do
-            if result.batch_id == handle.batch_id then
-                handle.pending_workers = handle.pending_workers - 1
-                table.insert(handle.results, result)
-            end
+            deliver_result(result)
             result = pool.result_channels[index]:pop()
         end
     end
@@ -191,7 +199,10 @@ local function routes_of(result)
 end
 
 local function sync_step(handle)
-    local routes = bruteforce.find(handle.market, { root_stations = nil })
+    local routes = bruteforce.find(handle.market, {
+        root_stations = nil,
+        deadline      = now_seconds() + constants.AGGRESSIVE_TIME_BUDGET_S,
+    })
     handle.is_done = true
     return true, routes or {}, handle.market.unsatisfiable or {}
 end
@@ -199,7 +210,15 @@ end
 local function fall_back_to_sync(handle, reason)
     handle.is_threaded = false
     handle.fallback_reason = reason
+    active_handles[handle.batch_id] = nil
     return sync_step(handle)
+end
+
+local function finish_handle(handle)
+    active_handles[handle.batch_id] = nil
+    handle.is_done = true
+    local routes, leftovers = routes_of(pick_best_result(handle.results))
+    return true, routes, leftovers
 end
 
 function bruteforce_pool.start(market)
@@ -213,7 +232,7 @@ function bruteforce_pool.start(market)
         is_done         = false,
     }
     if handle.is_threaded then
-        clear_channels(pool.worker_count)
+        active_handles[handle.batch_id] = handle
         dispatch_jobs(handle)
     end
     return handle
@@ -227,22 +246,14 @@ function bruteforce_pool.step(handle)
     if not handle.is_threaded then return sync_step(handle) end
     local crash = worker_error()
     if crash then return fall_back_to_sync(handle, crash) end
-    harvest_threaded(handle)
-    if handle.pending_workers <= 0 then
-        handle.is_done = true
-        local routes, leftovers = routes_of(pick_best_result(handle.results))
-        return true, routes, leftovers
-    end
+    drain_results()
+    if handle.pending_workers <= 0 then return finish_handle(handle) end
     return false, nil
 end
 
 function bruteforce_pool.cancel(handle)
     handle.is_done = true
-    if not handle.is_threaded then return end
-    for index = 1, pool.worker_count do
-        pool.job_channels[index]:clear()
-        pool.result_channels[index]:clear()
-    end
+    active_handles[handle.batch_id] = nil
 end
 
 function bruteforce_pool.shutdown()
@@ -255,6 +266,7 @@ function bruteforce_pool.shutdown()
     pool.job_channels = {}
     pool.result_channels = {}
     pool.worker_count = 0
+    active_handles = {}
 end
 
 return bruteforce_pool

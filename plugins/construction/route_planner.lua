@@ -30,13 +30,31 @@ local function merge_unsatisfiable(target, more)
     for _, key in ipairs(more) do table.insert(target, key) end
 end
 
+local function has_pending_demand(remaining)
+    if not remaining then return false end
+    local key = next(remaining)
+    while key do
+        if (remaining[key] or 0) > 0 then return true end
+        key = next(remaining, key)
+    end
+    return false
+end
+
+local function select_aggressive_routes(handle, agg_routes)
+    if agg_routes and #agg_routes > 0 then return agg_routes end
+    if has_pending_demand(handle.surveyed.remaining) then
+        return refined.find(handle.surveyed)
+    end
+    return {}
+end
+
 function route_planner.step_aggressive(handle)
-    local is_done, refined_routes, leftovers = bruteforce_pool.step(
+    local is_done, agg_routes, leftovers = bruteforce_pool.step(
         handle.pool_handle)
     if not is_done then return false, nil end
     local routes = {}
     trips.add_all(routes, handle.bulk_routes)
-    trips.add_all(routes, refined_routes or {})
+    trips.add_all(routes, select_aggressive_routes(handle, agg_routes))
     merge_unsatisfiable(handle.surveyed.unsatisfiable, leftovers)
     return true, assembly.assemble(routes, handle.surveyed)
 end

@@ -31,5 +31,6 @@ return {
     BULK_STOP_KIND        = "bulk",
     MULTI_STOP_KIND       = "multi",
 
-    AGGRESSIVE_WORKER_COUNT = 8,
+    AGGRESSIVE_WORKER_COUNT  = 8,
+    AGGRESSIVE_TIME_BUDGET_S = 30,
 }

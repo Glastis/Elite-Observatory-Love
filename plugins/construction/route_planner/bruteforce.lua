@@ -4,6 +4,18 @@ local trips_module   = require("plugins.construction.route_planner.trips")
 
 local bruteforce = {}
 
+local DEADLINE_CHECK_STRIDE = 1024
+
+local function resolve_clock()
+    local love_ref = rawget(_G, "love")
+    if love_ref and love_ref.timer and love_ref.timer.getTime then
+        return love_ref.timer.getTime
+    end
+    return os.clock
+end
+
+local now_seconds = resolve_clock()
+
 local function copy_map(map)
     local out = {}
     for key, value in pairs(map) do out[key] = value end
@@ -271,9 +283,20 @@ local function try_visits(ctx, cursor, cargo_left, trip_jumps, fill_trip)
     end
 end
 
+local function deadline_expired(ctx)
+    if ctx.is_expired then return true end
+    ctx.deadline_counter = ctx.deadline_counter + 1
+    if ctx.deadline_counter < DEADLINE_CHECK_STRIDE then return false end
+    ctx.deadline_counter = 0
+    if now_seconds() <= ctx.deadline then return false end
+    ctx.is_expired = true
+    return true
+end
+
 local function make_fill_trip(ctx)
     local fill_trip
     fill_trip = function(cursor, cargo_left, trip_jumps)
+        if deadline_expired(ctx) then return end
         local in_trip = #ctx.current_trip > 0
         if should_prune(ctx, trip_jumps, in_trip, cursor) then return end
         if ctx.remaining_total <= 0 or not any_useful_station(ctx) then
@@ -323,6 +346,9 @@ local function build_context(market, opts)
             total_jumps = math.huge, routes = nil,
             remaining = copy_map(market.remaining) },
         root_filter        = build_root_filter(opts.root_stations),
+        deadline           = opts.deadline or math.huge,
+        deadline_counter   = 0,
+        is_expired         = false,
     }
 end
 
