@@ -6,8 +6,12 @@ local bruteforce = {}
 
 local DEADLINE_CHECK_STRIDE = 1024
 
+local fill_trip
+
 local function resolve_clock()
-    local love_ref = rawget(_G, "love")
+    local love_ref
+
+    love_ref = rawget(_G, "love")
     if love_ref and love_ref.timer and love_ref.timer.getTime then
         return love_ref.timer.getTime
     end
@@ -17,21 +21,30 @@ end
 local now_seconds = resolve_clock()
 
 local function copy_map(map)
-    local out = {}
-    for key, value in pairs(map) do out[key] = value end
+    local out
+
+    out = {}
+    for key, value in pairs(map) do
+        out[key] = value
+    end
     return out
 end
 
 local function jumps_for(from_coords, to_coords, jump_range)
-    local distance = route_distance.between(from_coords, to_coords) or 0
+    local distance
+
+    distance = route_distance.between(from_coords, to_coords) or 0
     return route_distance.jumps_for_leg(distance, jump_range,
         constants.JUMPS_MIN_PER_LEG)
 end
 
 local function build_stock_table(index)
-    local stock = {}
+    local stock
+    local offers
+
+    stock = {}
     for key, station in pairs(index) do
-        local offers = {}
+        offers = {}
         for commodity_key, offer in pairs(station.offers) do
             offers[commodity_key] = offer.stock
         end
@@ -59,30 +72,48 @@ local function any_useful_station(ctx)
 end
 
 local function min_round_trip(stations, depot, ship)
-    local best = math.huge
+    local best
+    local out
+    local back
+    local round
+
+    best = math.huge
     for _, station in ipairs(stations) do
-        local out = jumps_for(depot, station.coords, ship.jump_range_unloaded)
-        local back = jumps_for(station.coords, depot, ship.jump_range_loaded)
-        local round = out + back
-        if round < best then best = round end
+        out = jumps_for(depot, station.coords, ship.jump_range_unloaded)
+        back = jumps_for(station.coords, depot, ship.jump_range_loaded)
+        round = out + back
+        if round < best then
+            best = round
+        end
     end
-    if best == math.huge then return 0 end
+    if best == math.huge then
+        return 0
+    end
     return best
 end
 
 local function station_cover_score(station, remaining, depot, ship)
-    local cover = 0
+    local cover
+    local offer
+    local round
+
+    cover = 0
     for commodity_key, qty in pairs(remaining) do
-        local offer = station.offers[commodity_key]
-        if offer and qty > 0 and offer.stock > 0 then cover = cover + 1 end
+        offer = station.offers[commodity_key]
+        if offer and qty > 0 and offer.stock > 0 then
+            cover = cover + 1
+        end
     end
-    local round = jumps_for(depot, station.coords, ship.jump_range_unloaded)
+    round = jumps_for(depot, station.coords, ship.jump_range_unloaded)
         + jumps_for(station.coords, depot, ship.jump_range_loaded)
     return cover * constants.STATION_COVERAGE_WEIGHT - round
 end
 
 local function sorted_stations(index, remaining, depot, ship)
-    local annotated = {}
+    local annotated
+    local list
+
+    annotated = {}
     for _, station in pairs(index) do
         table.insert(annotated, {
             station = station,
@@ -90,18 +121,25 @@ local function sorted_stations(index, remaining, depot, ship)
         })
     end
     table.sort(annotated, function(a, b)
-        if a.score ~= b.score then return a.score > b.score end
+        if a.score ~= b.score then
+            return a.score > b.score
+        end
         return a.station.key < b.station.key
     end)
-    local list = {}
-    for _, entry in ipairs(annotated) do table.insert(list, entry.station) end
+    list = {}
+    for _, entry in ipairs(annotated) do
+        table.insert(list, entry.station)
+    end
     return list
 end
 
 local function demand_keys_by_price(station, remaining)
-    local keys = {}
+    local keys
+    local offer
+
+    keys = {}
     for commodity_key, qty in pairs(remaining) do
-        local offer = station.offers[commodity_key]
+        offer = station.offers[commodity_key]
         if qty > 0 and offer and offer.stock > 0 then
             table.insert(keys, commodity_key)
         end
@@ -116,14 +154,23 @@ local function demand_keys_by_price(station, remaining)
 end
 
 local function commit_pickups(ctx, station, station_stock, cargo_left)
-    local pickups = {}
-    local taken = 0
+    local pickups
+    local taken
+    local offer
+    local wanted
+    local stock_avail
+    local take
+
+    pickups = {}
+    taken = 0
     for _, commodity_key in ipairs(demand_keys_by_price(station, ctx.remaining)) do
-        if taken >= cargo_left then break end
-        local offer = station.offers[commodity_key]
-        local wanted = ctx.remaining[commodity_key] or 0
-        local stock_avail = station_stock[commodity_key] or 0
-        local take = math.min(wanted, stock_avail, cargo_left - taken)
+        if taken >= cargo_left then
+            break
+        end
+        offer = station.offers[commodity_key]
+        wanted = ctx.remaining[commodity_key] or 0
+        stock_avail = station_stock[commodity_key] or 0
+        take = math.min(wanted, stock_avail, cargo_left - taken)
         if take > 0 then
             table.insert(pickups, {
                 commodity_key = commodity_key,
@@ -141,9 +188,12 @@ local function commit_pickups(ctx, station, station_stock, cargo_left)
 end
 
 local function revert_pickups(ctx, pickups, station_stock)
-    local total = 0
+    local total
+    local commodity_key
+
+    total = 0
     for _, pickup in ipairs(pickups) do
-        local commodity_key = pickup.commodity_key
+        commodity_key = pickup.commodity_key
         ctx.remaining[commodity_key] = (ctx.remaining[commodity_key] or 0)
             + pickup.quantity
         station_stock[commodity_key] = (station_stock[commodity_key] or 0)
@@ -154,7 +204,9 @@ local function revert_pickups(ctx, pickups, station_stock)
 end
 
 local function clone_stops(current_trip)
-    local stops = {}
+    local stops
+
+    stops = {}
     for _, stop in ipairs(current_trip) do
         table.insert(stops, {
             kind    = stop.kind,
@@ -167,7 +219,9 @@ local function clone_stops(current_trip)
 end
 
 local function clone_routes(routes)
-    local out = {}
+    local out
+
+    out = {}
     for _, trip in ipairs(routes) do
         table.insert(out, { stops = clone_stops(trip.stops) })
     end
@@ -175,7 +229,9 @@ local function clone_routes(routes)
 end
 
 local function is_better(stops_a, jumps_a, stops_b, jumps_b)
-    if stops_a ~= stops_b then return stops_a < stops_b end
+    if stops_a ~= stops_b then
+        return stops_a < stops_b
+    end
     return jumps_a < jumps_b
 end
 
@@ -191,33 +247,47 @@ local function record_best(ctx, total_stops, total_jumps)
 end
 
 local function remaining_min_stops(ctx)
-    if ctx.remaining_total <= 0 then return 0 end
+    if ctx.remaining_total <= 0 then
+        return 0
+    end
     return math.ceil(ctx.remaining_total / ctx.cargo_cap)
 end
 
 local function lower_bound_jumps(ctx, trip_jumps, in_trip, cursor)
-    local bound = ctx.accumulated_jumps + trip_jumps
+    local bound
+    local trips_needed
+
+    bound = ctx.accumulated_jumps + trip_jumps
     if in_trip then
         bound = bound + jumps_for(cursor, ctx.depot, ctx.ship.jump_range_loaded)
     end
     if ctx.remaining_total > 0 then
-        local trips_needed = math.ceil(ctx.remaining_total / ctx.cargo_cap)
+        trips_needed = math.ceil(ctx.remaining_total / ctx.cargo_cap)
         bound = bound + trips_needed * ctx.min_round_trip
     end
     return bound
 end
 
 local function should_prune(ctx, trip_jumps, in_trip, cursor)
-    local lb_stops = ctx.total_stops + remaining_min_stops(ctx)
-    if lb_stops > ctx.best.total_stops then return true end
-    if lb_stops < ctx.best.total_stops then return false end
+    local lb_stops
+
+    lb_stops = ctx.total_stops + remaining_min_stops(ctx)
+    if lb_stops > ctx.best.total_stops then
+        return true
+    end
+    if lb_stops < ctx.best.total_stops then
+        return false
+    end
     return lower_bound_jumps(ctx, trip_jumps, in_trip, cursor)
         >= ctx.best.total_jumps
 end
 
 local function finalise_with_open_trip(ctx, cursor, trip_jumps)
-    local closed = trip_jumps
-    local appended = false
+    local closed
+    local appended
+
+    closed = trip_jumps
+    appended = false
     if #ctx.current_trip > 0 then
         closed = closed + jumps_for(cursor, ctx.depot, ctx.ship.jump_range_loaded)
         table.insert(ctx.accumulated_routes,
@@ -225,39 +295,55 @@ local function finalise_with_open_trip(ctx, cursor, trip_jumps)
         appended = true
     end
     record_best(ctx, ctx.total_stops, ctx.accumulated_jumps + closed)
-    if appended then table.remove(ctx.accumulated_routes) end
+    if appended then
+        table.remove(ctx.accumulated_routes)
+    end
 end
 
-local function close_trip_and_recurse(ctx, cursor, trip_jumps, fill_trip)
-    local return_jumps = jumps_for(cursor, ctx.depot,
-        ctx.ship.jump_range_loaded)
+local function close_trip_and_recurse(ctx, cursor, trip_jumps)
+    local return_jumps
+    local saved_jumps
+    local saved_trip
+
+    return_jumps = jumps_for(cursor, ctx.depot, ctx.ship.jump_range_loaded)
     table.insert(ctx.accumulated_routes,
         { stops = clone_stops(ctx.current_trip) })
-    local saved_jumps = ctx.accumulated_jumps
-    local saved_trip  = ctx.current_trip
+    saved_jumps = ctx.accumulated_jumps
+    saved_trip  = ctx.current_trip
     ctx.accumulated_jumps = ctx.accumulated_jumps + trip_jumps + return_jumps
     ctx.current_trip = {}
-    fill_trip(ctx.depot, ctx.cargo_cap, 0)
+    fill_trip(ctx, ctx.depot, ctx.cargo_cap, 0)
     ctx.current_trip = saved_trip
     ctx.accumulated_jumps = saved_jumps
     table.remove(ctx.accumulated_routes)
 end
 
 local function should_filter_station(ctx, station)
-    if not ctx.root_filter then return false end
-    if #ctx.accumulated_routes > 0 or #ctx.current_trip > 0 then return false end
+    if not ctx.root_filter then
+        return false
+    end
+    if #ctx.accumulated_routes > 0 or #ctx.current_trip > 0 then
+        return false
+    end
     return ctx.root_filter[station.key] ~= true
 end
 
-local function attempt_visit(ctx, station, cursor, cargo_left, trip_jumps,
-        fill_trip)
-    local station_stock = ctx.stock[station.key]
-    local jump_range = (#ctx.current_trip == 0)
+local function attempt_visit(ctx, station, cursor, cargo_left, trip_jumps)
+    local station_stock
+    local jump_range
+    local leg_jumps
+    local pickups
+    local taken
+
+    station_stock = ctx.stock[station.key]
+    jump_range = (#ctx.current_trip == 0)
         and ctx.ship.jump_range_unloaded
         or ctx.ship.jump_range_loaded
-    local leg_jumps = jumps_for(cursor, station.coords, jump_range)
-    local pickups, taken = commit_pickups(ctx, station, station_stock, cargo_left)
-    if taken <= 0 then return end
+    leg_jumps = jumps_for(cursor, station.coords, jump_range)
+    pickups, taken = commit_pickups(ctx, station, station_stock, cargo_left)
+    if taken <= 0 then
+        return
+    end
     table.insert(ctx.current_trip, {
         kind    = constants.MULTI_STOP_KIND,
         station = station,
@@ -265,68 +351,89 @@ local function attempt_visit(ctx, station, cursor, cargo_left, trip_jumps,
         pickups = pickups,
     })
     ctx.total_stops = ctx.total_stops + 1
-    fill_trip(station.coords, cargo_left - taken, trip_jumps + leg_jumps)
+    fill_trip(ctx, station.coords, cargo_left - taken, trip_jumps + leg_jumps)
     ctx.total_stops = ctx.total_stops - 1
     table.remove(ctx.current_trip)
     revert_pickups(ctx, pickups, station_stock)
 end
 
-local function try_visits(ctx, cursor, cargo_left, trip_jumps, fill_trip)
+local function try_visits(ctx, cursor, cargo_left, trip_jumps)
+    local station_stock
+
     for _, station in ipairs(ctx.stations) do
         if not should_filter_station(ctx, station) then
-            local station_stock = ctx.stock[station.key]
+            station_stock = ctx.stock[station.key]
             if station_useful(station, ctx.remaining, station_stock) then
-                attempt_visit(ctx, station, cursor, cargo_left, trip_jumps,
-                    fill_trip)
+                attempt_visit(ctx, station, cursor, cargo_left, trip_jumps)
             end
         end
     end
 end
 
 local function deadline_expired(ctx)
-    if ctx.is_expired then return true end
+    if ctx.is_expired then
+        return true
+    end
     ctx.deadline_counter = ctx.deadline_counter + 1
-    if ctx.deadline_counter < DEADLINE_CHECK_STRIDE then return false end
+    if ctx.deadline_counter < DEADLINE_CHECK_STRIDE then
+        return false
+    end
     ctx.deadline_counter = 0
-    if now_seconds() <= ctx.deadline then return false end
+    if now_seconds() <= ctx.deadline then
+        return false
+    end
     ctx.is_expired = true
     return true
 end
 
-local function make_fill_trip(ctx)
-    local fill_trip
-    fill_trip = function(cursor, cargo_left, trip_jumps)
-        if deadline_expired(ctx) then return end
-        local in_trip = #ctx.current_trip > 0
-        if should_prune(ctx, trip_jumps, in_trip, cursor) then return end
-        if ctx.remaining_total <= 0 or not any_useful_station(ctx) then
-            return finalise_with_open_trip(ctx, cursor, trip_jumps)
-        end
-        if in_trip then
-            close_trip_and_recurse(ctx, cursor, trip_jumps, fill_trip)
-        end
-        if cargo_left > 0 then
-            try_visits(ctx, cursor, cargo_left, trip_jumps, fill_trip)
-        end
+fill_trip = function(ctx, cursor, cargo_left, trip_jumps)
+    local in_trip
+
+    if deadline_expired(ctx) then
+        return
     end
-    return fill_trip
+    in_trip = #ctx.current_trip > 0
+    if should_prune(ctx, trip_jumps, in_trip, cursor) then
+        return
+    end
+    if ctx.remaining_total <= 0 or not any_useful_station(ctx) then
+        return finalise_with_open_trip(ctx, cursor, trip_jumps)
+    end
+    if in_trip then
+        close_trip_and_recurse(ctx, cursor, trip_jumps)
+    end
+    if cargo_left > 0 then
+        try_visits(ctx, cursor, cargo_left, trip_jumps)
+    end
 end
 
 local function compute_remaining_total(remaining)
-    local total = 0
-    for _, qty in pairs(remaining) do total = total + qty end
+    local total
+
+    total = 0
+    for _, qty in pairs(remaining) do
+        total = total + qty
+    end
     return total
 end
 
 local function build_root_filter(root_stations)
-    if not root_stations then return nil end
-    local filter = {}
-    for _, key in ipairs(root_stations) do filter[key] = true end
+    local filter
+
+    if not root_stations then
+        return nil
+    end
+    filter = {}
+    for _, key in ipairs(root_stations) do
+        filter[key] = true
+    end
     return filter
 end
 
 local function build_context(market, opts)
-    local stations = sorted_stations(market.index, market.remaining,
+    local stations
+
+    stations = sorted_stations(market.index, market.remaining,
         market.depot_coords, market.ship)
     return {
         ship               = market.ship,
@@ -354,16 +461,21 @@ end
 
 local function append_leftovers(remaining, unsatisfiable)
     for commodity_key, qty in pairs(remaining) do
-        if qty > 0 then table.insert(unsatisfiable, commodity_key) end
+        if qty > 0 then
+            table.insert(unsatisfiable, commodity_key)
+        end
     end
 end
 
 function bruteforce.find(market, opts)
+    local ctx
+
     opts = opts or {}
-    if not next(market.remaining) then return {}, 0, 0 end
-    local ctx = build_context(market, opts)
-    local fill_trip = make_fill_trip(ctx)
-    fill_trip(ctx.depot, ctx.cargo_cap, 0)
+    if not next(market.remaining) then
+        return {}, 0, 0
+    end
+    ctx = build_context(market, opts)
+    fill_trip(ctx, ctx.depot, ctx.cargo_cap, 0)
     append_leftovers(ctx.best.remaining or ctx.remaining, market.unsatisfiable)
     if ctx.best.total_stops == math.huge then
         return nil, math.huge, math.huge

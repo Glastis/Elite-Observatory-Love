@@ -18,11 +18,19 @@ local aggressive_fetches = {}
 local is_aggressive_mode = false
 
 local function numeric_ship()
-    local cargo = tonumber(ship_params.cargo_capacity)
-    local loaded = tonumber(ship_params.jump_loaded)
-    local unloaded = tonumber(ship_params.jump_unloaded)
-    if not (cargo and loaded and unloaded) then return nil end
-    if cargo < 1 or loaded <= 0 or unloaded <= 0 then return nil end
+    local cargo
+    local loaded
+    local unloaded
+
+    cargo = tonumber(ship_params.cargo_capacity)
+    loaded = tonumber(ship_params.jump_loaded)
+    unloaded = tonumber(ship_params.jump_unloaded)
+    if not (cargo and loaded and unloaded) then
+        return nil
+    end
+    if cargo < 1 or loaded <= 0 or unloaded <= 0 then
+        return nil
+    end
     return {
         cargo_capacity      = math.floor(cargo),
         jump_range_loaded   = loaded,
@@ -31,7 +39,11 @@ local function numeric_ship()
 end
 
 local function build_demand(site)
-    local demand, displays = {}, {}
+    local demand
+    local displays
+
+    demand = {}
+    displays = {}
     for _, entry in ipairs(amounts.unfinished(site)) do
         if entry.to_buy > 0 then
             demand[entry.resource.key] = entry.to_buy
@@ -42,9 +54,13 @@ local function build_demand(site)
 end
 
 local function provided_by_key(site)
-    local map = {}
-    local resources = (site and site.resources) or {}
-    local index = 1
+    local map
+    local resources
+    local index
+
+    map = {}
+    resources = (site and site.resources) or {}
+    index = 1
     while resources[index] do
         map[resources[index].key] = resources[index].provided or 0
         index = index + 1
@@ -53,11 +69,17 @@ local function provided_by_key(site)
 end
 
 local function provided_delta(baseline, current)
-    local delta = {}
-    local key = next(current)
+    local delta
+    local key
+    local gained
+
+    delta = {}
+    key = next(current)
     while key do
-        local gained = current[key] - (baseline[key] or 0)
-        if gained > 0 then delta[key] = gained end
+        gained = current[key] - (baseline[key] or 0)
+        if gained > 0 then
+            delta[key] = gained
+        end
         key = next(current, key)
     end
     return delta
@@ -83,13 +105,17 @@ local function ship_matches(a, b)
 end
 
 local function is_route_current(market_id, ship)
-    local route = route_state.get(market_id)
+    local route
+
+    route = route_state.get(market_id)
     return route ~= nil and route.status == constants.STATUS_READY
         and ship_matches(route.ship_snapshot, ship)
 end
 
 local function current_origin_coords()
-    local current = state.current_system()
+    local current
+
+    current = state.current_system()
     return current and current.coords
 end
 
@@ -124,8 +150,12 @@ local function begin_aggressive(fetch)
 end
 
 local function finish_fetch(fetch)
-    if fetch.is_cancelled then return end
-    local site = state.get_site(fetch.market_id)
+    local site
+
+    if fetch.is_cancelled then
+        return
+    end
+    site = state.get_site(fetch.market_id)
     if not site then
         route_state.clear_in_flight(fetch.market_id)
         return route_state.remove(fetch.market_id)
@@ -136,53 +166,82 @@ local function finish_fetch(fetch)
         route_state.clear_in_flight(fetch.market_id)
         return route_state.set_status(fetch.market_id, constants.STATUS_ERROR)
     end
-    if fetch.is_aggressive then return begin_aggressive(fetch) end
+    if fetch.is_aggressive then
+        return begin_aggressive(fetch)
+    end
     finalise_normal(fetch, site)
 end
 
 local function finalise_aggressive(fetch, route)
+    local site
+
     aggressive_fetches[fetch.market_id] = nil
     route_state.clear_in_flight(fetch.market_id)
-    local site = state.get_site(fetch.market_id)
-    if not site then return route_state.remove(fetch.market_id) end
+    site = state.get_site(fetch.market_id)
+    if not site then
+        return route_state.remove(fetch.market_id)
+    end
     finalise_route(fetch, route, site)
 end
 
 local function poll_aggressive_fetches()
-    for market_id, fetch in pairs(aggressive_fetches) do
+    local is_done
+    local route
+
+    for _, fetch in pairs(aggressive_fetches) do
         if not fetch.is_cancelled then
-            local is_done, route = route_planner.step_aggressive(
-                fetch.bruteforce_handle)
-            if is_done then finalise_aggressive(fetch, route) end
+            is_done, route = route_planner.step_aggressive(fetch.bruteforce_handle)
+            if is_done then
+                finalise_aggressive(fetch, route)
+            end
         end
     end
 end
 
 local function decrement_and_maybe_finish(fetch)
     fetch.pending = fetch.pending - 1
-    if fetch.pending <= 0 then finish_fetch(fetch) end
+    if fetch.pending <= 0 then
+        finish_fetch(fetch)
+    end
 end
 
 local function count_keys(map)
-    local count = 0
-    for _ in pairs(map) do count = count + 1 end
+    local count
+
+    count = 0
+    for _ in pairs(map) do
+        count = count + 1
+    end
     return count
 end
 
 local function track_request(fetch, request_id)
-    if request_id then table.insert(fetch.request_ids, request_id) end
+    if request_id then
+        table.insert(fetch.request_ids, request_id)
+    end
+end
+
+local function on_export_response(fetch, commodity_key, is_ok, sources)
+    if fetch.is_cancelled then
+        return
+    end
+    if is_ok then
+        fetch.success_count = fetch.success_count + 1
+    end
+    fetch.sources_by_key[commodity_key] = is_ok and sources or {}
+    decrement_and_maybe_finish(fetch)
 end
 
 local function issue_exports(fetch)
+    local api_name
+    local request_id
+
     for commodity_key in pairs(fetch.demand) do
-        local api_name = commodity_names.to_api_name(commodity_key)
-        local request_id = route_api.fetch_exports(core_ref, fetch.system_name,
+        api_name = commodity_names.to_api_name(commodity_key)
+        request_id = route_api.fetch_exports(core_ref, fetch.system_name,
             api_name, constants.EXPORTS_MIN_VOLUME,
             function(is_ok, sources)
-                if fetch.is_cancelled then return end
-                if is_ok then fetch.success_count = fetch.success_count + 1 end
-                fetch.sources_by_key[commodity_key] = is_ok and sources or {}
-                decrement_and_maybe_finish(fetch)
+                on_export_response(fetch, commodity_key, is_ok, sources)
             end)
         track_request(fetch, request_id)
     end
@@ -190,7 +249,9 @@ end
 
 local function start_fetch(market_id, system_name, ship, depot_coords,
         demand, displays)
-    local fetch = {
+    local fetch
+
+    fetch = {
         market_id      = market_id,
         system_name    = system_name,
         ship           = ship,
@@ -210,8 +271,12 @@ local function start_fetch(market_id, system_name, ship, depot_coords,
 end
 
 local function cancel_in_flight(market_id)
-    local fetch = route_state.in_flight_handle(market_id)
-    if not fetch then return end
+    local fetch
+
+    fetch = route_state.in_flight_handle(market_id)
+    if not fetch then
+        return
+    end
     fetch.is_cancelled = true
     if fetch.bruteforce_handle then
         route_planner.cancel_aggressive(fetch.bruteforce_handle)
@@ -245,28 +310,45 @@ function route_service.set_aggressive_mode(is_aggressive)
     is_aggressive_mode = is_aggressive and true or false
 end
 
+local function resolve_depot_coords(site)
+    return site.system_coords or state.coords_for_system(site.system_name)
+end
+
 function route_service.compute_for_site(market_id, is_forced)
-    if not core_ref then return end
+    local site
+    local ship
+    local depot_coords
+    local demand
+    local displays
+
+    if not core_ref then
+        return
+    end
     if core_ref.refresh_ancillary_state then
         core_ref:refresh_ancillary_state()
     end
-    local site = state.get_site(market_id)
-    if not site or not site.system_name then return end
+    site = state.get_site(market_id)
+    if not site or not site.system_name then
+        return
+    end
     if route_state.in_flight_handle(market_id) then
-        if not is_forced then return end
+        if not is_forced then
+            return
+        end
         cancel_in_flight(market_id)
     end
-    local ship = numeric_ship()
+    ship = numeric_ship()
     if not ship then
         return route_state.set_status(market_id, constants.STATUS_NO_SHIP_PARAMS)
     end
-    local depot_coords = site.system_coords
-        or state.coords_for_system(site.system_name)
+    depot_coords = resolve_depot_coords(site)
     if not depot_coords then
         return route_state.set_status(market_id, constants.STATUS_NO_COORDS)
     end
-    if not is_forced and is_route_current(market_id, ship) then return end
-    local demand, displays = build_demand(site)
+    if not is_forced and is_route_current(market_id, ship) then
+        return
+    end
+    demand, displays = build_demand(site)
     if not next(demand) then
         route_state.set(market_id, ready_empty_route(ship))
         delivered_baseline[market_id] = provided_by_key(site)
@@ -285,7 +367,9 @@ function route_service.compute_all(is_forced)
 end
 
 function route_service.on_site_added(market_id)
-    if core_ref and core_ref:is_log_monitor_batch_reading() then return end
+    if core_ref and core_ref:is_log_monitor_batch_reading() then
+        return
+    end
     route_service.compute_for_site(market_id, false)
 end
 
@@ -297,14 +381,26 @@ function route_service.on_site_removed(market_id)
 end
 
 function route_service.on_site_updated(market_id)
-    local route = route_state.get(market_id)
-    if not route or route.status ~= constants.STATUS_READY then return end
-    local baseline = delivered_baseline[market_id]
-    if not baseline then return end
-    local site = state.get_site(market_id)
-    if not site then return end
-    local current = provided_by_key(site)
-    local delta = provided_delta(baseline, current)
+    local route
+    local baseline
+    local site
+    local current
+    local delta
+
+    route = route_state.get(market_id)
+    if not route or route.status ~= constants.STATUS_READY then
+        return
+    end
+    baseline = delivered_baseline[market_id]
+    if not baseline then
+        return
+    end
+    site = state.get_site(market_id)
+    if not site then
+        return
+    end
+    current = provided_by_key(site)
+    delta = provided_delta(baseline, current)
     delivered_baseline[market_id] = current
     if next(delta) then
         route_consumption.apply(route, delta)
@@ -313,7 +409,9 @@ function route_service.on_site_updated(market_id)
 end
 
 function route_service.on_monitor_state_changed()
-    if core_ref and core_ref:is_log_monitor_batch_reading() then return end
+    if core_ref and core_ref:is_log_monitor_batch_reading() then
+        return
+    end
     route_service.compute_all(false)
 end
 

@@ -7,8 +7,19 @@ local hierarchy = require("observatory.plugin_helpers.grid_hierarchy")
 
 local grid = {}
 
+local STATUS_CONFIRMED = "confirmed"
+local STATUS_PENDING   = "pending"
+local STATUS_EXCLUDED  = "excluded"
+local STATUS_PREDICTED = "predicted"
+local UNKNOWN_GLYPH    = "?"
+local BODY_NODE_PREFIX = "body_"
+local GENUS_NODE_INFIX = "_g_"
+local PENDING_NODE_SUFFIX = "_pending"
+
 local function format_number(value)
-    if not value or value <= 0 then return constants.UNKNOWN_TEXT end
+    if not value or value <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
     if value >= constants.VALUE_MILLION then
         return string.format(constants.VALUE_MILLION_FORMAT,
             value / constants.VALUE_MILLION)
@@ -25,19 +36,24 @@ local function format_distance(distance_ls)
 end
 
 local function display_name(body)
-    if body and body.name and body.name ~= "" and body.name ~= "?" then
+    if body and body.name and body.name ~= "" and body.name ~= UNKNOWN_GLYPH then
         return body.name
     end
     return constants.UNNAMED_BODY_PLACEHOLDER
 end
 
 local function format_value_for_genus(genus_entry, genus_label)
-    local exact = body_value.exact_value_for_entry(genus_entry)
+    local exact
+    local range
+
+    exact = body_value.exact_value_for_entry(genus_entry)
     if exact then
         return string.format(constants.VALUE_FORMAT, format_number(exact))
     end
-    local range = species_values.for_genus(genus_label)
-    if not range then return constants.UNKNOWN_TEXT end
+    range = species_values.for_genus(genus_label)
+    if not range then
+        return constants.UNKNOWN_TEXT
+    end
     if range.min == range.max then
         return string.format(constants.VALUE_FORMAT, format_number(range.min))
     end
@@ -46,7 +62,9 @@ local function format_value_for_genus(genus_entry, genus_label)
 end
 
 local function format_value_for_species(species_label)
-    local exact = species_values.for_species(species_label)
+    local exact
+
+    exact = species_values.for_species(species_label)
     if exact and exact > 0 then
         return string.format(constants.VALUE_FORMAT, format_number(exact))
     end
@@ -54,8 +72,13 @@ local function format_value_for_species(species_label)
 end
 
 local function format_body_value(body)
-    local lo, hi = body_value.body_value_bounds(body)
-    if hi <= 0 then return constants.UNKNOWN_TEXT end
+    local lo
+    local hi
+
+    lo, hi = body_value.body_value_bounds(body)
+    if hi <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
     if lo == hi then
         return string.format(constants.VALUE_FORMAT, format_number(lo))
     end
@@ -89,49 +112,65 @@ local function variant_for_pending(species_label, body)
 end
 
 local function variant_for_row(body, entry, species_label, status)
-    if status == "confirmed" then
+    if status == STATUS_CONFIRMED then
         return entry.variant_label or constants.UNKNOWN_TEXT
     end
     return variant_for_pending(species_label, body)
 end
 
 local function display_status(entry, status)
-    if status == "pending" and entry and entry.dss_confirmed then
-        return constants.STATUS_LABEL.predicted
+    if status == STATUS_PENDING and entry and entry.dss_confirmed then
+        return constants.STATUS_LABEL[STATUS_PREDICTED]
     end
     return constants.STATUS_LABEL[status] or status
 end
 
+local function body_type_label(body)
+    if body.body_type and body.body_type ~= "" then
+        return body.body_type
+    end
+    return constants.UNKNOWN_TEXT
+end
+
 local function species_row_for_status(body, genus_label, species_label, status, body_label)
-    local entry = body.genus_entries[genus_label]
-    local is_confirmed = (status == "confirmed")
+    local entry
+    local is_confirmed
+
+    entry = body.genus_entries[genus_label]
+    is_confirmed = (status == STATUS_CONFIRMED)
     return {
         ["Body"]     = body_label,
-        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Type"]     = body_type_label(body),
         ["Genus"]    = genus_label,
         ["Species"]  = species_label,
         ["Status"]   = display_status(entry, status),
         ["Variant"]  = variant_for_row(body, entry, species_label, status),
-        ["Samples"]  = is_confirmed and (constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?") or constants.SAMPLE_INDEX_TO_LABEL[0],
+        ["Samples"]  = is_confirmed
+            and (constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or UNKNOWN_GLYPH)
+            or constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = format_value_for_species(species_label),
         ["Distance"] = format_distance(body.distance_ls),
     }
 end
 
 local function row_for_genus(body, genus_label, body_label)
-    local entry = body.genus_entries[genus_label]
-    local variant_label = entry.variant_label
+    local entry
+    local variant_label
+
+    entry = body.genus_entries[genus_label]
+    variant_label = entry.variant_label
     if not variant_label and entry.species_label then
         variant_label = variants.predict_for(entry.species_label, body)
     end
     return {
         ["Body"]     = body_label,
-        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Type"]     = body_type_label(body),
         ["Genus"]    = genus_label,
         ["Species"]  = entry.species_label or constants.UNKNOWN_TEXT,
-        ["Status"]   = entry.species_label and constants.STATUS_LABEL.confirmed or constants.STATUS_LABEL.pending,
+        ["Status"]   = entry.species_label and constants.STATUS_LABEL[STATUS_CONFIRMED]
+            or constants.STATUS_LABEL[STATUS_PENDING],
         ["Variant"]  = variant_label or constants.UNKNOWN_TEXT,
-        ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or "?",
+        ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[entry.sample_index] or UNKNOWN_GLYPH,
         ["Value"]    = format_value_for_genus(entry, genus_label),
         ["Distance"] = format_distance(body.distance_ls),
     }
@@ -140,11 +179,11 @@ end
 local function row_for_pending_body(body, body_label)
     return {
         ["Body"]     = body_label,
-        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Type"]     = body_type_label(body),
         ["Genus"]    = string.format("%s x %d",
             constants.PENDING_BIO_PLACEHOLDER, body.biological_count),
         ["Species"]  = constants.UNKNOWN_TEXT,
-        ["Status"]   = constants.STATUS_LABEL.pending,
+        ["Status"]   = constants.STATUS_LABEL[STATUS_PENDING],
         ["Variant"]  = constants.UNKNOWN_TEXT,
         ["Samples"]  = constants.SAMPLE_INDEX_TO_LABEL[0],
         ["Value"]    = constants.UNKNOWN_TEXT,
@@ -170,7 +209,7 @@ end
 local function body_header_row(body, body_label)
     return {
         ["Body"]     = body_label,
-        ["Type"]     = body.body_type ~= "" and body.body_type or constants.UNKNOWN_TEXT,
+        ["Type"]     = body_type_label(body),
         ["Genus"]    = constants.UNKNOWN_TEXT,
         ["Species"]  = constants.UNKNOWN_TEXT,
         ["Status"]   = constants.UNKNOWN_TEXT,
@@ -182,17 +221,25 @@ local function body_header_row(body, body_label)
 end
 
 local function should_skip_body(body, settings)
-    if not body then return true end
+    if not body then
+        return true
+    end
     if body.biological_count <= 0 and #body.genus_order == 0 then
         return true
     end
-    if not settings or not settings.only_show_high_value then return false end
-    if #body.genus_order == 0 then return false end
+    if not settings or not settings.only_show_high_value then
+        return false
+    end
+    if #body.genus_order == 0 then
+        return false
+    end
     return body_value.body_potential_max(body) < (settings.minimum_high_value or 0)
 end
 
 local function bodies_with_biology(bodies)
-    local list = {}
+    local list
+
+    list = {}
     for _, body in pairs(bodies) do
         if body.biological_count > 0 or #body.genus_order > 0 then
             table.insert(list, body)
@@ -205,23 +252,32 @@ local function bodies_with_biology(bodies)
 end
 
 local function should_hide_pending_species(status, species_label, body)
-    if status ~= "pending" then return false end
+    if status ~= STATUS_PENDING then
+        return false
+    end
     return variants.predict_for(species_label, body) == nil
 end
 
 local function rows_for_genus_species(body, genus_label, body_label)
-    local entry = body.genus_entries[genus_label]
+    local entry
+    local rows
+    local emitted_first
+    local status
+    local label
+
+    entry = body.genus_entries[genus_label]
     if not entry or #entry.species_order == 0 then
         return { row_for_genus(body, genus_label, body_label) }
     end
-    local rows = {}
-    local emitted_first = false
+    rows = {}
+    emitted_first = false
     for _, species_label in ipairs(entry.species_order) do
-        local status = entry.species_states[species_label] or "pending"
-        if status ~= "excluded"
+        status = entry.species_states[species_label] or STATUS_PENDING
+        if status ~= STATUS_EXCLUDED
             and not should_hide_pending_species(status, species_label, body) then
-            local label = (not emitted_first) and body_label or ""
-            table.insert(rows, species_row_for_status(body, genus_label, species_label, status, label))
+            label = (not emitted_first) and body_label or ""
+            table.insert(rows,
+                species_row_for_status(body, genus_label, species_label, status, label))
             emitted_first = true
         end
     end
@@ -229,13 +285,17 @@ local function rows_for_genus_species(body, genus_label, body_label)
 end
 
 local function rows_for_body(body, body_label)
+    local rows
+    local emitted_label
+    local label
+
     if #body.genus_order == 0 then
         return { row_for_pending_body(body, body_label) }
     end
-    local rows = {}
-    local emitted_label = false
+    rows = {}
+    emitted_label = false
     for _, genus_label in ipairs(body.genus_order) do
-        local label = (not emitted_label) and body_label or ""
+        label = (not emitted_label) and body_label or ""
         for _, row in ipairs(rows_for_genus_species(body, genus_label, label)) do
             table.insert(rows, row)
             label = ""
@@ -256,7 +316,9 @@ local function rebuild_flat(target_grid, bodies, settings)
 end
 
 local function visible_seed_ids(bodies, settings)
-    local seeds = {}
+    local seeds
+
+    seeds = {}
     for id, body in pairs(bodies) do
         if not should_skip_body(body, settings) then
             table.insert(seeds, id)
@@ -272,53 +334,89 @@ local function annotate_hierarchy(row, depth, node_id, raw_body_name)
     return row
 end
 
+local function emit_pending_body_row(target_grid, body, body_node_id, depth, sub_indent)
+    table.insert(target_grid.rows,
+        annotate_hierarchy(
+            decorate_with_body_data(row_for_pending_body(body, sub_indent), body),
+            depth, body_node_id .. PENDING_NODE_SUFFIX, ""))
+end
+
+local function genus_row_node_id(body_node_id, genus_label, row)
+    return body_node_id
+        .. GENUS_NODE_INFIX
+        .. genus_label
+        .. "_"
+        .. (row["Species"] or UNKNOWN_GLYPH)
+end
+
 local function emit_genus_children(target_grid, body, body_node_id, depth)
-    local sub_indent = hierarchy.indent_prefix(depth)
+    local sub_indent
+
+    sub_indent = hierarchy.indent_prefix(depth)
     if #body.genus_order == 0 then
-        table.insert(target_grid.rows,
-            annotate_hierarchy(decorate_with_body_data(row_for_pending_body(body, sub_indent), body),
-                depth, body_node_id .. "_pending", ""))
+        emit_pending_body_row(target_grid, body, body_node_id, depth, sub_indent)
         return
     end
     for _, genus_label in ipairs(body.genus_order) do
         for _, row in ipairs(rows_for_genus_species(body, genus_label, sub_indent)) do
             table.insert(target_grid.rows,
                 annotate_hierarchy(decorate_with_body_data(row, body), depth,
-                    body_node_id .. "_g_" .. genus_label .. "_" .. (row["Species"] or "?"), ""))
+                    genus_row_node_id(body_node_id, genus_label, row), ""))
         end
     end
 end
 
+local function emit_placeholder_ancestor(target_grid, body, indented_name, depth, body_node_id, raw_name)
+    local placeholder
+
+    placeholder = placeholder_ancestor_row(body, indented_name)
+    if body then
+        placeholder = decorate_with_body_data(placeholder, body)
+    end
+    table.insert(target_grid.rows,
+        annotate_hierarchy(placeholder, depth, body_node_id, raw_name))
+end
+
 local function emit_hierarchical_rows(target_grid, bodies, id, depth, settings)
-    local body = bodies[id]
-    local raw_name = display_name(body)
-    local indented_name = hierarchy.indent_prefix(depth) .. raw_name
-    local body_node_id = "body_" .. tostring(id)
+    local body
+    local raw_name
+    local indented_name
+    local body_node_id
+
+    body = bodies[id]
+    raw_name = display_name(body)
+    indented_name = hierarchy.indent_prefix(depth) .. raw_name
+    body_node_id = BODY_NODE_PREFIX .. tostring(id)
     if not body or should_skip_body(body, settings) then
-        local placeholder = placeholder_ancestor_row(body, indented_name)
-        if body then placeholder = decorate_with_body_data(placeholder, body) end
-        table.insert(target_grid.rows,
-            annotate_hierarchy(placeholder, depth, body_node_id, raw_name))
+        emit_placeholder_ancestor(target_grid, body, indented_name, depth,
+            body_node_id, raw_name)
         return
     end
     table.insert(target_grid.rows,
-        annotate_hierarchy(decorate_with_body_data(body_header_row(body, indented_name), body),
+        annotate_hierarchy(
+            decorate_with_body_data(body_header_row(body, indented_name), body),
             depth, body_node_id, raw_name))
     emit_genus_children(target_grid, body, body_node_id, depth + 1)
+end
+
+local function compare_by_distance(a, b, bodies)
+    local da
+    local db
+
+    da = bodies[a] and bodies[a].distance_ls or 0
+    db = bodies[b] and bodies[b].distance_ls or 0
+    return da < db
 end
 
 local function rebuild_hierarchical(target_grid, bodies, settings)
     hierarchy.walk({
         seed_ids = visible_seed_ids(bodies, settings),
         parent_for = function(id)
-            local body = bodies[id]
-            return body and body.parent_body_id
+            return bodies[id] and bodies[id].parent_body_id
         end,
         sort_ids = function(ids)
             table.sort(ids, function(a, b)
-                local da = bodies[a] and bodies[a].distance_ls or 0
-                local db = bodies[b] and bodies[b].distance_ls or 0
-                return da < db
+                return compare_by_distance(a, b, bodies)
             end)
         end,
         visit = function(id, depth)

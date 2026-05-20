@@ -54,9 +54,13 @@ local FORMAT_SCALES = {
 }
 
 local function draw_check_icon(x, y, size)
-    local s = size - STATUS_BADGE_INSET * 2
-    local ox = x + STATUS_BADGE_INSET
-    local oy = y + STATUS_BADGE_INSET
+    local s
+    local ox
+    local oy
+
+    s = size - STATUS_BADGE_INSET * 2
+    ox = x + STATUS_BADGE_INSET
+    oy = y + STATUS_BADGE_INSET
     love.graphics.line(
         ox,            oy + s * 0.55,
         ox + s * 0.38, oy + s * 0.92,
@@ -65,9 +69,13 @@ local function draw_check_icon(x, y, size)
 end
 
 local function draw_arrow_icon(x, y, size)
-    local s = size - STATUS_BADGE_INSET * 2
-    local ox = x + STATUS_BADGE_INSET
-    local oy = y + STATUS_BADGE_INSET
+    local s
+    local ox
+    local oy
+
+    s = size - STATUS_BADGE_INSET * 2
+    ox = x + STATUS_BADGE_INSET
+    oy = y + STATUS_BADGE_INSET
     love.graphics.polygon("fill",
         ox + s * 0.20, oy + s * 0.10,
         ox + s * 0.95, oy + s * 0.50,
@@ -76,8 +84,11 @@ local function draw_arrow_icon(x, y, size)
 end
 
 local function draw_dot_icon(x, y, size)
-    local cx = x + size * 0.5
-    local cy = y + size * 0.5
+    local cx
+    local cy
+
+    cx = x + size * 0.5
+    cy = y + size * 0.5
     love.graphics.circle("fill", cx, cy, math.max(1, size * 0.18))
 end
 
@@ -88,15 +99,22 @@ local STATUS_BADGE = {
 }
 
 local function scan_dot_color_key(dot_index, scans)
-    if scans >= SCAN_DOTS_TOTAL then return "success" end
-    if dot_index <= scans then return "accent" end
+    if scans >= SCAN_DOTS_TOTAL then
+        return "success"
+    end
+    if dot_index <= scans then
+        return "accent"
+    end
     return "text_faint"
 end
 
 local function draw_scan_dots(scans, x, y)
-    local cy = y + SCAN_DOT_RADIUS
+    local cy
+    local cx
+
+    cy = y + SCAN_DOT_RADIUS
     for i = 1, SCAN_DOTS_TOTAL do
-        local cx = x + SCAN_DOT_RADIUS
+        cx = x + SCAN_DOT_RADIUS
             + (i - 1) * (SCAN_DOT_RADIUS * 2 + SCAN_DOT_GAP)
         love.graphics.setColor(theme.colors[scan_dot_color_key(i, scans)])
         love.graphics.circle("fill", cx, cy, SCAN_DOT_RADIUS)
@@ -130,17 +148,23 @@ local function font_for(spec)
 end
 
 local function format_number(value)
-    if not value or value <= 0 then return constants.UNKNOWN_TEXT end
+    if not value or value <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
     return format.compact_number(value, FORMAT_SCALES, constants.UNKNOWN_TEXT)
 end
 
 local function format_value_str(value)
-    if not value or value <= 0 then return constants.UNKNOWN_TEXT end
+    if not value or value <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
     return string.format(constants.VALUE_FORMAT, format_number(value))
 end
 
 local function format_distance(distance_ls)
-    if not distance_ls or distance_ls <= 0 then return constants.UNKNOWN_TEXT end
+    if not distance_ls or distance_ls <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
     return string.format(constants.DISTANCE_FORMAT, distance_ls)
 end
 
@@ -152,15 +176,23 @@ local function format_sample_distance_value(meters)
 end
 
 local function format_sample_distance_pair(meters, required_meters)
-    local current = format_sample_distance_value(meters)
-    if not required_meters then return current end
+    local current
+
+    current = format_sample_distance_value(meters)
+    if not required_meters then
+        return current
+    end
     return string.format(constants.SAMPLE_DISTANCE_PAIR_FMT,
         current, format_sample_distance_value(required_meters))
 end
 
 local function build_sample_distance_text(info)
-    if not info then return nil end
-    local required = sample_distances.for_genus(info.genus_label)
+    local required
+
+    if not info then
+        return nil
+    end
+    required = sample_distances.for_genus(info.genus_label)
     return {
         text = string.format("%s: %s",
             constants.SAMPLE_DISTANCE_LABEL,
@@ -170,18 +202,30 @@ local function build_sample_distance_text(info)
 end
 
 local function format_body_value(body)
-    local lo, hi = body_value.body_value_bounds(body)
-    if hi <= 0 then return constants.UNKNOWN_TEXT end
-    if lo == hi then return format_value_str(lo) end
+    local lo
+    local hi
+
+    lo, hi = body_value.body_value_bounds(body)
+    if hi <= 0 then
+        return constants.UNKNOWN_TEXT
+    end
+    if lo == hi then
+        return format_value_str(lo)
+    end
     return string.format(constants.VALUE_RANGE_FORMAT,
         format_number(lo), format_number(hi))
 end
 
 local function is_body_fully_scanned(body)
-    if not body or (body.biological_count or 0) <= 0 then return false end
-    local complete = 0
+    local complete
+    local entry
+
+    if not body or (body.biological_count or 0) <= 0 then
+        return false
+    end
+    complete = 0
     for _, genus_label in ipairs(body.genus_order) do
-        local entry = body.genus_entries[genus_label]
+        entry = body.genus_entries[genus_label]
         if entry and entry.species_label
             and (entry.sample_index or 0) >= SCAN_DOTS_TOTAL then
             complete = complete + 1
@@ -191,16 +235,28 @@ local function is_body_fully_scanned(body)
 end
 
 local function should_skip_body(body, settings, hide_scanned)
-    if not body then return true end
-    if body.biological_count <= 0 and #body.genus_order == 0 then return true end
-    if hide_scanned and is_body_fully_scanned(body) then return true end
-    if not settings or not settings.only_show_high_value then return false end
-    if #body.genus_order == 0 then return false end
+    if not body then
+        return true
+    end
+    if body.biological_count <= 0 and #body.genus_order == 0 then
+        return true
+    end
+    if hide_scanned and is_body_fully_scanned(body) then
+        return true
+    end
+    if not settings or not settings.only_show_high_value then
+        return false
+    end
+    if #body.genus_order == 0 then
+        return false
+    end
     return body_value.body_potential_max(body) < (settings.minimum_high_value or 0)
 end
 
 local function status_for_species(entry, species_label)
-    local status = entry.species_states[species_label] or STATUS_PENDING
+    local status
+
+    status = entry.species_states[species_label] or STATUS_PENDING
     if status == STATUS_PENDING and entry.dss_confirmed then
         return STATUS_PREDICTED
     end
@@ -208,14 +264,22 @@ local function status_for_species(entry, species_label)
 end
 
 local function genus_status(entry)
-    if entry.species_label then return STATUS_CONFIRMED end
-    if entry.dss_confirmed then return STATUS_PREDICTED end
+    if entry.species_label then
+        return STATUS_CONFIRMED
+    end
+    if entry.dss_confirmed then
+        return STATUS_PREDICTED
+    end
     return STATUS_PENDING
 end
 
 local function species_short_name(label)
-    local stripped = label:gsub("^%S+%s*", "")
-    if stripped == "" then return label end
+    local stripped
+
+    stripped = label:gsub("^%S+%s*", "")
+    if stripped == "" then
+        return label
+    end
     return stripped
 end
 
@@ -227,11 +291,15 @@ local function variant_for_species(species_label, status, entry, body)
 end
 
 local function build_species_entries(entry, body)
-    local list = {}
+    local list
+    local status
+    local raw_value
+
+    list = {}
     for _, species_label in ipairs(entry.species_order) do
-        local status = status_for_species(entry, species_label)
+        status = status_for_species(entry, species_label)
         if status ~= STATUS_EXCLUDED then
-            local raw_value = species_values.for_species(species_label) or 0
+            raw_value = species_values.for_species(species_label) or 0
             table.insert(list, {
                 label         = species_label,
                 short         = species_short_name(species_label),
@@ -243,9 +311,14 @@ local function build_species_entries(entry, body)
         end
     end
     table.sort(list, function(a, b)
-        local ra = STATUS_RANK[a.status] or STATUS_FALLBACK_RANK
-        local rb = STATUS_RANK[b.status] or STATUS_FALLBACK_RANK
-        if ra ~= rb then return ra < rb end
+        local ra
+        local rb
+
+        ra = STATUS_RANK[a.status] or STATUS_FALLBACK_RANK
+        rb = STATUS_RANK[b.status] or STATUS_FALLBACK_RANK
+        if ra ~= rb then
+            return ra < rb
+        end
         return a.label < b.label
     end)
     return list
@@ -253,16 +326,23 @@ end
 
 local function any_species_high_value(species_list)
     for _, sp in ipairs(species_list) do
-        if sp.is_high_value then return true end
+        if sp.is_high_value then
+            return true
+        end
     end
     return false
 end
 
 local function build_genus_block(body, genus_label)
-    local entry = body.genus_entries[genus_label]
-    local status = genus_status(entry)
-    local right_resolver = GENUS_RIGHT_LABEL[status]
-    local species = build_species_entries(entry, body)
+    local entry
+    local status
+    local right_resolver
+    local species
+
+    entry = body.genus_entries[genus_label]
+    status = genus_status(entry)
+    right_resolver = GENUS_RIGHT_LABEL[status]
+    species = build_species_entries(entry, body)
     return {
         label         = genus_label,
         entry         = entry,
@@ -274,9 +354,15 @@ local function build_genus_block(body, genus_label)
 end
 
 local function display_body_name(body, system_name, hide_system)
-    local name = format.display_name(body, nil)
-    if not name then return constants.UNNAMED_BODY_PLACEHOLDER end
-    if not hide_system then return name end
+    local name
+
+    name = format.display_name(body, nil)
+    if not name then
+        return constants.UNNAMED_BODY_PLACEHOLDER
+    end
+    if not hide_system then
+        return name
+    end
     return format.strip_system_prefix(name, system_name)
 end
 
@@ -288,24 +374,35 @@ local function star_label(body)
 end
 
 local function body_type_label(body)
-    if body.body_type and body.body_type ~= "" then return body.body_type end
+    if body.body_type and body.body_type ~= "" then
+        return body.body_type
+    end
     return constants.UNKNOWN_TEXT
 end
 
 local function bios_label(body)
-    local count = body.biological_count or 0
-    local plural = count == 1 and "" or "s"
+    local count
+    local plural
+
+    count = body.biological_count or 0
+    plural = count == 1 and "" or "s"
     return string.format("%d bio%s", count, plural)
 end
 
 local function body_sort_value(body)
-    local _, hi = body_value.body_value_bounds(body)
+    local _
+    local hi
+
+    _, hi = body_value.body_value_bounds(body)
     return hi or 0
 end
 
 local function build_card(body, system_name, hide_system)
-    local sample_info = plugin_state.last_sample_info_for_body_name(body.name)
-    local card = {
+    local sample_info
+    local card
+
+    sample_info = plugin_state.last_sample_info_for_body_name(body.name)
+    card = {
         body            = body,
         system_name     = system_name,
         title           = display_body_name(body, system_name, hide_system),
@@ -352,9 +449,14 @@ local function comparator_for(sort_mode)
 end
 
 local function build_cards(settings, hide_system, sort_mode, hide_scanned)
-    local list = {}
-    local system = plugin_state.current_system()
-    if not system then return list end
+    local list
+    local system
+
+    list = {}
+    system = plugin_state.current_system()
+    if not system then
+        return list
+    end
     for _, body in pairs(system.bodies) do
         if not should_skip_body(body, settings, hide_scanned) then
             table.insert(list, build_card(body, system.name, hide_system))
@@ -365,40 +467,58 @@ local function build_cards(settings, hide_system, sort_mode, hide_scanned)
 end
 
 local function genus_block_height(block)
-    local rows = math.max(1, #block.species)
+    local rows
+
+    rows = math.max(1, #block.species)
     return GENUS_HEADER_H + rows * SPECIES_ROW_H
 end
 
 local function genuses_height(card)
-    local total = 0
+    local total
+
+    total = 0
     for i, block in ipairs(card.genuses) do
-        if i > 1 then total = total + SECTION_GAP end
+        if i > 1 then
+            total = total + SECTION_GAP
+        end
         total = total + genus_block_height(block)
     end
     return total
 end
 
 local function sample_distance_row_height(card)
-    if card.sample_distance then return CARD_SAMPLE_DIST_H end
+    if card.sample_distance then
+        return CARD_SAMPLE_DIST_H
+    end
     return 0
 end
 
 local function card_height(card)
-    local h = CARD_PAD_Y * 2 + CARD_HEADER_H + CARD_SUB_H
+    local h
+
+    h = CARD_PAD_Y * 2 + CARD_HEADER_H + CARD_SUB_H
         + sample_distance_row_height(card)
     if card.unmapped_count > 0 and #card.genuses == 0 then
         return h + CARD_INTERNAL_GAP + GENUS_HEADER_H
     end
-    if #card.genuses == 0 then return h end
+    if #card.genuses == 0 then
+        return h
+    end
     return h + CARD_INTERNAL_GAP + genuses_height(card)
 end
 
 local function draw_card_title(card, x, y, w)
-    local title_font = font_for(FONT_TITLE)
-    local value_font = font_for(FONT_BODY_VALUE)
-    local rw = text.width(card.body_value, value_font, 0.1)
-    local title_w = math.max(0, w - rw - 12)
-    local fitted = text.truncate_right(card.title, title_font, title_w, 0)
+    local title_font
+    local value_font
+    local rw
+    local title_w
+    local fitted
+
+    title_font = font_for(FONT_TITLE)
+    value_font = font_for(FONT_BODY_VALUE)
+    rw = text.width(card.body_value, value_font, 0.1)
+    title_w = math.max(0, w - rw - 12)
+    fitted = text.truncate_right(card.title, title_font, title_w, 0)
     text.draw(fitted, x, y, { font = title_font, color = theme.colors.text })
     text.draw(card.body_value, x + w - rw, y + 2, {
         font = value_font, color = theme.colors.accent, letter_em = 0.1,
@@ -410,9 +530,13 @@ local function build_subheader_parts(card)
 end
 
 local function draw_card_subheader(card, x, y, w)
-    local sub_font = font_for(FONT_SUB)
-    local joined = table.concat(build_subheader_parts(card), SUB_PARTS_SEP)
-    local fitted = text.truncate_right(joined, sub_font, w, 0.06)
+    local sub_font
+    local joined
+    local fitted
+
+    sub_font = font_for(FONT_SUB)
+    joined = table.concat(build_subheader_parts(card), SUB_PARTS_SEP)
+    fitted = text.truncate_right(joined, sub_font, w, 0.06)
     text.draw(fitted, x, y, {
         font = sub_font, color = theme.colors.text_dim, letter_em = 0.06,
     })
@@ -424,45 +548,68 @@ local SAMPLE_DISTANCE_COLOR_KEY = {
 }
 
 local function draw_sample_distance_row(card, x, y, w)
-    if not card.sample_distance then return end
-    local font = font_for(FONT_SAMPLE_DIST)
-    local fitted = text.truncate_right(card.sample_distance.text, font, w, 0.06)
-    local color_key = SAMPLE_DISTANCE_COLOR_KEY[card.sample_distance.is_reached]
+    local font
+    local fitted
+    local color_key
+
+    if not card.sample_distance then
+        return
+    end
+    font = font_for(FONT_SAMPLE_DIST)
+    fitted = text.truncate_right(card.sample_distance.text, font, w, 0.06)
+    color_key = SAMPLE_DISTANCE_COLOR_KEY[card.sample_distance.is_reached]
     text.draw(fitted, x, y, {
         font = font, color = theme.colors[color_key], letter_em = 0.06,
     })
 end
 
 local function draw_right_scans(payload, x, y, w)
-    local meta_font = font_for(FONT_META)
-    local dot_y = y + math.floor((meta_font:getHeight() - SCAN_DOT_RADIUS * 2) / 2) + 1
+    local meta_font
+    local dot_y
+
+    meta_font = font_for(FONT_META)
+    dot_y = y + math.floor((meta_font:getHeight() - SCAN_DOT_RADIUS * 2) / 2) + 1
     draw_scan_dots(payload.scans, x + w - SCAN_DOTS_WIDTH, dot_y)
 end
 
 local GENUS_RIGHT_RENDERERS = { scans = draw_right_scans }
 
 local function draw_genus_header(block, x, y, w)
-    local genus_font = font_for(FONT_GENUS)
+    local genus_font
+    local renderer
+
+    genus_font = font_for(FONT_GENUS)
     text.draw(block.label, x, y, {
         font = genus_font, color = theme.colors.text, letter_em = 0.08,
         bold = block.is_high_value,
     })
-    if not block.right then return end
-    local renderer = GENUS_RIGHT_RENDERERS[block.right.kind]
-    if not renderer then return end
+    if not block.right then
+        return
+    end
+    renderer = GENUS_RIGHT_RENDERERS[block.right.kind]
+    if not renderer then
+        return
+    end
     renderer(block.right, x, y, w)
 end
 
 local function species_label_color(status)
-    local key = SPECIES_LABEL_COLOR[status] or "text_dim"
+    local key
+
+    key = SPECIES_LABEL_COLOR[status] or "text_dim"
     return theme.colors[key]
 end
 
 local function draw_species_badge(sp, x, y)
-    local species_font = font_for(FONT_SPECIES)
-    local badge_def = STATUS_BADGE[sp.status] or STATUS_BADGE[STATUS_PENDING]
-    local icon_y = y + math.floor((species_font:getHeight() - STATUS_BADGE_SIZE) / 2)
-    local prev_w = love.graphics.getLineWidth()
+    local species_font
+    local badge_def
+    local icon_y
+    local prev_w
+
+    species_font = font_for(FONT_SPECIES)
+    badge_def = STATUS_BADGE[sp.status] or STATUS_BADGE[STATUS_PENDING]
+    icon_y = y + math.floor((species_font:getHeight() - STATUS_BADGE_SIZE) / 2)
+    prev_w = love.graphics.getLineWidth()
     love.graphics.setLineWidth(badge_def.line_w)
     love.graphics.setColor(theme.colors[badge_def.color_key])
     badge_def.draw(x, icon_y, STATUS_BADGE_SIZE)
@@ -470,10 +617,17 @@ local function draw_species_badge(sp, x, y)
 end
 
 local function draw_species_variant(sp, x, y, max_w)
-    if not sp.variant or sp.variant == "" then return end
-    if max_w <= 0 then return end
-    local meta_font = font_for(FONT_META)
-    local fitted = text.truncate_right("(" .. sp.variant .. ")",
+    local meta_font
+    local fitted
+
+    if not sp.variant or sp.variant == "" then
+        return
+    end
+    if max_w <= 0 then
+        return
+    end
+    meta_font = font_for(FONT_META)
+    fitted = text.truncate_right("(" .. sp.variant .. ")",
         meta_font, max_w, 0.04)
     text.draw(fitted, x, y + 1, {
         font = meta_font, color = theme.colors.text_faint, letter_em = 0.04,
@@ -482,9 +636,13 @@ local function draw_species_variant(sp, x, y, max_w)
 end
 
 local function draw_species_value(sp, x, y, w)
-    local meta_font = font_for(FONT_META)
-    local rw = text.width(sp.value, meta_font, 0.06)
-    local color_key = sp.is_high_value and "text" or "text_dim"
+    local meta_font
+    local rw
+    local color_key
+
+    meta_font = font_for(FONT_META)
+    rw = text.width(sp.value, meta_font, 0.06)
+    color_key = sp.is_high_value and "text" or "text_dim"
     text.draw(sp.value, x + w - rw, y + 1, {
         font = meta_font, color = theme.colors[color_key], letter_em = 0.06,
         bold = sp.is_high_value,
@@ -493,23 +651,32 @@ local function draw_species_value(sp, x, y, w)
 end
 
 local function draw_species_row(sp, x, y, w)
-    local species_font = font_for(FONT_SPECIES)
+    local species_font
+    local label_x
+    local label_w
+    local value_w
+    local variant_x
+    local variant_max_w
+
+    species_font = font_for(FONT_SPECIES)
     draw_species_badge(sp, x, y)
-    local label_x = x + STATUS_BADGE_W
+    label_x = x + STATUS_BADGE_W
     text.draw(sp.short, label_x, y, {
         font = species_font, color = species_label_color(sp.status),
         bold = sp.is_high_value,
     })
-    local label_w = text.width(sp.short, species_font, 0)
-    local value_w = draw_species_value(sp, x, y, w)
-    local variant_x = label_x + label_w + SPECIES_VARIANT_GAP
-    local variant_max_w = (x + w - value_w - SPECIES_VARIANT_GAP) - variant_x
+    label_w = text.width(sp.short, species_font, 0)
+    value_w = draw_species_value(sp, x, y, w)
+    variant_x = label_x + label_w + SPECIES_VARIANT_GAP
+    variant_max_w = (x + w - value_w - SPECIES_VARIANT_GAP) - variant_x
     draw_species_variant(sp, variant_x, y, variant_max_w)
 end
 
 local function draw_genus_block(block, x, y, w)
+    local cy
+
     draw_genus_header(block, x, y, w)
-    local cy = y + GENUS_HEADER_H
+    cy = y + GENUS_HEADER_H
     for _, sp in ipairs(block.species) do
         draw_species_row(sp, x, cy, w)
         cy = cy + SPECIES_ROW_H
@@ -518,8 +685,11 @@ local function draw_genus_block(block, x, y, w)
 end
 
 local function draw_unmapped_section(card, x, y)
-    local font = font_for(FONT_SPECIES)
-    local label = string.format("%s x %d",
+    local font
+    local label
+
+    font = font_for(FONT_SPECIES)
+    label = string.format("%s x %d",
         constants.PENDING_BIO_PLACEHOLDER, card.unmapped_count)
     text.draw(label, x, y, {
         font = font, color = theme.colors.text_faint, letter_em = 0.04,
@@ -527,23 +697,31 @@ local function draw_unmapped_section(card, x, y)
 end
 
 local function draw_card_body(card, x, y, w)
+    local cy
+
     if card.unmapped_count > 0 and #card.genuses == 0 then
         draw_unmapped_section(card, x, y)
         return
     end
-    local cy = y
+    cy = y
     for i, block in ipairs(card.genuses) do
-        if i > 1 then cy = cy + SECTION_GAP end
+        if i > 1 then
+            cy = cy + SECTION_GAP
+        end
         cy = draw_genus_block(block, x, cy, w)
     end
 end
 
 local function draw_card(card, x, y, w, h)
+    local inner_x
+    local inner_w
+    local cy
+
     h = h or card_height(card)
     card_view.draw_card_panel(x, y, w, h)
-    local inner_x = x + CARD_PAD_X
-    local inner_w = w - CARD_PAD_X * 2
-    local cy = y + CARD_PAD_Y
+    inner_x = x + CARD_PAD_X
+    inner_w = w - CARD_PAD_X * 2
+    cy = y + CARD_PAD_Y
     draw_card_title(card, inner_x, cy, inner_w)
     cy = cy + CARD_HEADER_H
     draw_card_subheader(card, inner_x, cy, inner_w)
@@ -552,16 +730,23 @@ local function draw_card(card, x, y, w, h)
         draw_sample_distance_row(card, inner_x, cy, inner_w)
         cy = cy + CARD_SAMPLE_DIST_H
     end
-    if card.unmapped_count == 0 and #card.genuses == 0 then return h end
+    if card.unmapped_count == 0 and #card.genuses == 0 then
+        return h
+    end
     cy = cy + CARD_INTERNAL_GAP
     draw_card_body(card, inner_x, cy, inner_w)
     return h
 end
 
 function CARD_VIEW.card_count(settings, hide_scanned)
-    local count = 0
-    local system = plugin_state.current_system()
-    if not system then return count end
+    local count
+    local system
+
+    count = 0
+    system = plugin_state.current_system()
+    if not system then
+        return count
+    end
     for _, body in pairs(system.bodies) do
         if not should_skip_body(body, settings, hide_scanned) then
             count = count + 1

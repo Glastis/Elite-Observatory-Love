@@ -4,6 +4,10 @@ local store_helpers = require("observatory.plugin_helpers.state")
 
 local state = {}
 
+local UNKNOWN_BODY_NAME = "?"
+local UPPER_CLAMP = 1
+local LOWER_CLAMP = -1
+
 local user_context = {
     near_nebula   = false,
     near_guardian = false,
@@ -13,16 +17,25 @@ local last_status = nil
 local last_sample_position = nil
 
 local function clamp_unit(value)
-    if value > 1 then return 1 end
-    if value < -1 then return -1 end
+    if value > UPPER_CLAMP then
+        return UPPER_CLAMP
+    end
+    if value < LOWER_CLAMP then
+        return LOWER_CLAMP
+    end
     return value
 end
 
 local function haversine_meters(lat1, lon1, lat2, lon2, radius_m)
-    local r1 = math.rad(lat1)
-    local r2 = math.rad(lat2)
-    local dlon = math.rad(lon2 - lon1)
-    local cos_central = math.sin(r1) * math.sin(r2)
+    local r1
+    local r2
+    local dlon
+    local cos_central
+
+    r1 = math.rad(lat1)
+    r2 = math.rad(lat2)
+    dlon = math.rad(lon2 - lon1)
+    cos_central = math.sin(r1) * math.sin(r2)
         + math.cos(r1) * math.cos(r2) * math.cos(dlon)
     return radius_m * math.acos(clamp_unit(cos_central))
 end
@@ -48,7 +61,9 @@ local SPECIES_STATUS = {
 state.SPECIES_STATUS = SPECIES_STATUS
 
 local function build_initial_species_states(genus_label)
-    local result = {}
+    local result
+
+    result = {}
     for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
         result[species_label] = SPECIES_STATUS.PENDING
     end
@@ -69,7 +84,7 @@ end
 
 local function blank_body(body_name)
     return {
-        name                = body_name or "?",
+        name                = body_name or UNKNOWN_BODY_NAME,
         body_type           = "",
         atmosphere_type     = "",
         atmosphere          = "",
@@ -97,7 +112,9 @@ state.bodies_in_current_system = store.bodies_in_current_system
 state.systems_sorted           = store.systems_sorted
 
 local function system_for_body(body)
-    if not body or not body.system_address then return nil end
+    if not body or not body.system_address then
+        return nil
+    end
     return store.systems[body.system_address]
 end
 
@@ -109,23 +126,33 @@ local function build_eval_context(body)
     }
 end
 
+local function status_after_codex_match(match)
+    if match == false then
+        return SPECIES_STATUS.EXCLUDED
+    end
+    return SPECIES_STATUS.PENDING
+end
+
 local function apply_codex_constraints(body, entry)
-    if entry.species_label then return end
-    local eval_context = build_eval_context(body)
+    local eval_context
+    local match
+
+    if entry.species_label then
+        return
+    end
+    eval_context = build_eval_context(body)
     for species_label, status in pairs(entry.species_states) do
         if status ~= SPECIES_STATUS.CONFIRMED then
-            local match = species_codex.species_matches_body(species_label, body, eval_context)
-            if match == false then
-                entry.species_states[species_label] = SPECIES_STATUS.EXCLUDED
-            else
-                entry.species_states[species_label] = SPECIES_STATUS.PENDING
-            end
+            match = species_codex.species_matches_body(species_label, body, eval_context)
+            entry.species_states[species_label] = status_after_codex_match(match)
         end
     end
 end
 
 function state.ensure_genus(body, genus_label)
-    if not body or not genus_label then return nil end
+    if not body or not genus_label then
+        return nil
+    end
     if not body.genus_entries[genus_label] then
         body.genus_entries[genus_label] = blank_genus_entry(genus_label)
         table.insert(body.genus_order, genus_label)
@@ -135,13 +162,19 @@ function state.ensure_genus(body, genus_label)
 end
 
 function state.mark_genus_dss_confirmed(body, genus_label)
-    local entry = state.ensure_genus(body, genus_label)
-    if entry then entry.dss_confirmed = true end
+    local entry
+
+    entry = state.ensure_genus(body, genus_label)
+    if entry then
+        entry.dss_confirmed = true
+    end
     return entry
 end
 
 local function genus_is_authoritative(entry)
-    if not entry then return false end
+    if not entry then
+        return false
+    end
     return entry.dss_confirmed or entry.species_label ~= nil
 end
 
@@ -156,25 +189,35 @@ local function remove_genus(body, genus_label)
 end
 
 function state.prune_candidate_genuses(body)
-    if not body then return end
-    local stale = {}
+    local stale
+
+    if not body then
+        return
+    end
+    stale = {}
     for genus_label, entry in pairs(body.genus_entries) do
         if not genus_is_authoritative(entry) then
             table.insert(stale, genus_label)
         end
     end
-    for _, label in ipairs(stale) do remove_genus(body, label) end
+    for _, label in ipairs(stale) do
+        remove_genus(body, label)
+    end
 end
 
 function state.refresh_genus_constraints(body)
-    if not body then return end
+    if not body then
+        return
+    end
     for _, entry in pairs(body.genus_entries) do
         apply_codex_constraints(body, entry)
     end
 end
 
 local function genus_has_possible_species(body, genus_label)
-    local eval_context = build_eval_context(body)
+    local eval_context
+
+    eval_context = build_eval_context(body)
     for _, species_label in ipairs(species_values.species_in_genus(genus_label)) do
         if species_codex.species_matches_body(species_label, body, eval_context) ~= false then
             return true
@@ -185,16 +228,26 @@ end
 
 local function body_has_dss_data(body)
     for _, entry in pairs(body.genus_entries) do
-        if entry.dss_confirmed then return true end
+        if entry.dss_confirmed then
+            return true
+        end
     end
     return false
 end
 
 function state.populate_candidate_genuses(body)
-    if not body then return end
-    if body.biological_count <= 0 then return end
-    if not body.body_type or body.body_type == "" then return end
-    if body_has_dss_data(body) then return end
+    if not body then
+        return
+    end
+    if body.biological_count <= 0 then
+        return
+    end
+    if not body.body_type or body.body_type == "" then
+        return
+    end
+    if body_has_dss_data(body) then
+        return
+    end
     for _, genus_label in ipairs(species_codex.all_genuses()) do
         if not body.genus_entries[genus_label]
             and genus_has_possible_species(body, genus_label) then
@@ -204,18 +257,24 @@ function state.populate_candidate_genuses(body)
 end
 
 local function genus_can_be_pruned_after_refresh(body, genus_label, entry)
-    if entry.species_label or entry.dss_confirmed then return false end
+    if entry.species_label or entry.dss_confirmed then
+        return false
+    end
     return not genus_has_possible_species(body, genus_label)
 end
 
 local function drop_now_impossible_genuses(body)
-    local stale = {}
+    local stale
+
+    stale = {}
     for genus_label, entry in pairs(body.genus_entries) do
         if genus_can_be_pruned_after_refresh(body, genus_label, entry) then
             table.insert(stale, genus_label)
         end
     end
-    for _, label in ipairs(stale) do remove_genus(body, label) end
+    for _, label in ipairs(stale) do
+        remove_genus(body, label)
+    end
 end
 
 function state.refresh_all_constraints()
@@ -230,9 +289,23 @@ function state.refresh_all_constraints()
     end
 end
 
+local function sync_species_states_to_confirmed(entry, confirmed_species_label)
+    for sibling in pairs(entry.species_states) do
+        if sibling == confirmed_species_label then
+            entry.species_states[sibling] = SPECIES_STATUS.CONFIRMED
+        else
+            entry.species_states[sibling] = SPECIES_STATUS.EXCLUDED
+        end
+    end
+end
+
 function state.confirm_species(body, genus_label, species_label, variant_label, sample_index)
-    if not body or not genus_label or not species_label then return end
-    local entry = state.ensure_genus(body, genus_label)
+    local entry
+
+    if not body or not genus_label or not species_label then
+        return
+    end
+    entry = state.ensure_genus(body, genus_label)
     entry.species_label   = species_label
     entry.variant_label   = variant_label or entry.variant_label
     entry.sample_index    = math.max(entry.sample_index, sample_index or 0)
@@ -242,13 +315,7 @@ function state.confirm_species(body, genus_label, species_label, variant_label, 
         entry.species_states[species_label] = SPECIES_STATUS.PENDING
         table.insert(entry.species_order, species_label)
     end
-    for sibling in pairs(entry.species_states) do
-        if sibling == species_label then
-            entry.species_states[sibling] = SPECIES_STATUS.CONFIRMED
-        else
-            entry.species_states[sibling] = SPECIES_STATUS.EXCLUDED
-        end
-    end
+    sync_species_states_to_confirmed(entry, species_label)
 end
 
 function state.set_current_status(status)
@@ -256,12 +323,21 @@ function state.set_current_status(status)
 end
 
 function state.record_sample_at_current_position(genus_label)
-    if not last_status then return end
-    local body_name = last_status.BodyName
-    local lat = last_status.Latitude
-    local lon = last_status.Longitude
-    local radius_m = last_status.PlanetRadius
-    if not body_name or not lat or not lon or not radius_m then return end
+    local body_name
+    local lat
+    local lon
+    local radius_m
+
+    if not last_status then
+        return
+    end
+    body_name = last_status.BodyName
+    lat = last_status.Latitude
+    lon = last_status.Longitude
+    radius_m = last_status.PlanetRadius
+    if not body_name or not lat or not lon or not radius_m then
+        return
+    end
     last_sample_position = {
         body_name     = body_name,
         latitude      = lat,
@@ -272,12 +348,23 @@ function state.record_sample_at_current_position(genus_label)
 end
 
 function state.last_sample_info_for_body_name(body_name)
-    if not last_status or not last_sample_position then return nil end
-    if last_sample_position.body_name ~= body_name then return nil end
-    if last_status.BodyName ~= body_name then return nil end
-    local lat = last_status.Latitude
-    local lon = last_status.Longitude
-    if not lat or not lon then return nil end
+    local lat
+    local lon
+
+    if not last_status or not last_sample_position then
+        return nil
+    end
+    if last_sample_position.body_name ~= body_name then
+        return nil
+    end
+    if last_status.BodyName ~= body_name then
+        return nil
+    end
+    lat = last_status.Latitude
+    lon = last_status.Longitude
+    if not lat or not lon then
+        return nil
+    end
     return {
         distance_m  = haversine_meters(
             last_sample_position.latitude, last_sample_position.longitude,

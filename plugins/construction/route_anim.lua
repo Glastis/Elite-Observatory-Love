@@ -15,20 +15,29 @@ local PHASE_FADE   = "fade"
 local PHASE_PRUNED = "pruned"
 
 local function ensure_card_anim(view_state, market_id)
+    local card_anim
+
     view_state.route_anim = view_state.route_anim or {}
-    local card_anim = view_state.route_anim[market_id]
-    if card_anim then return card_anim end
+    card_anim = view_state.route_anim[market_id]
+    if card_anim then
+        return card_anim
+    end
     card_anim = { stops = {} }
     view_state.route_anim[market_id] = card_anim
     return card_anim
 end
 
 local function build_layout(stops, top_y, ctx)
-    local layout = {}
-    local cy = top_y
-    local index = 1
+    local layout
+    local cy
+    local index
+    local stop
+
+    layout = {}
+    cy = top_y
+    index = 1
     while stops[index] do
-        local stop = stops[index]
+        stop = stops[index]
         cy = cy + ctx.gap
         layout[index] = { stop = stop, target_y = cy }
         cy = cy + ctx.stop_height(stop)
@@ -38,8 +47,11 @@ local function build_layout(stops, top_y, ctx)
 end
 
 local function count_existing(card_anim, layout)
-    local existing = 0
-    local index = 1
+    local existing
+    local index
+
+    existing = 0
+    index = 1
     while layout[index] do
         if card_anim.stops[layout[index].stop.id] then
             existing = existing + 1
@@ -50,7 +62,9 @@ local function count_existing(card_anim, layout)
 end
 
 local function new_entry(target_y, is_intro)
-    local entry = {
+    local entry
+
+    entry = {
         y        = animation.tween(target_y),
         alpha    = animation.tween(1),
         green    = animation.tween(0),
@@ -65,8 +79,11 @@ local function new_entry(target_y, is_intro)
 end
 
 local function present_ids(layout)
-    local ids = {}
-    local index = 1
+    local ids
+    local index
+
+    ids = {}
+    index = 1
     while layout[index] do
         ids[layout[index].stop.id] = true
         index = index + 1
@@ -75,13 +92,19 @@ local function present_ids(layout)
 end
 
 local function drop_missing(card_anim, ids)
-    local stale = {}
-    local id = next(card_anim.stops)
+    local stale
+    local id
+    local index
+
+    stale = {}
+    id = next(card_anim.stops)
     while id do
-        if not ids[id] then table.insert(stale, id) end
+        if not ids[id] then
+            table.insert(stale, id)
+        end
         id = next(card_anim.stops, id)
     end
-    local index = 1
+    index = 1
     while stale[index] do
         card_anim.stops[stale[index]] = nil
         index = index + 1
@@ -89,10 +112,14 @@ local function drop_missing(card_anim, ids)
 end
 
 local function reconcile(card_anim, layout)
-    local is_intro = count_existing(card_anim, layout) > 0
-    local index = 1
+    local is_intro
+    local index
+    local item
+
+    is_intro = count_existing(card_anim, layout) > 0
+    index = 1
     while layout[index] do
-        local item = layout[index]
+        item = layout[index]
         if not card_anim.stops[item.stop.id] then
             card_anim.stops[item.stop.id] = new_entry(item.target_y, is_intro)
         end
@@ -118,10 +145,16 @@ local PHASE_NEXT = {
 }
 
 local function advance_phase(entry, dt)
-    local step = PHASE_NEXT[entry.phase]
-    if not step then return false end
+    local step
+
+    step = PHASE_NEXT[entry.phase]
+    if not step then
+        return false
+    end
     entry.phase_t = entry.phase_t + dt
-    if entry.phase_t < step.duration then return false end
+    if entry.phase_t < step.duration then
+        return false
+    end
     entry.phase = step.follows
     entry.phase_t = 0
     if PHASE_NEXT[entry.phase] and PHASE_NEXT[entry.phase].on_enter then
@@ -131,7 +164,9 @@ local function advance_phase(entry, dt)
 end
 
 local function slide_to(entry, target_y)
-    if entry.target_y == target_y then return end
+    if entry.target_y == target_y then
+        return
+    end
     entry.target_y = target_y
     animation.go(entry.y, target_y, SLIDE_S, EASING)
 end
@@ -144,38 +179,58 @@ local function update_entry(entry, target_y, dt)
 end
 
 local function draw_entry(entry, stop, x, w, ctx)
-    if entry.phase == PHASE_PRUNED then return end
+    if entry.phase == PHASE_PRUNED then
+        return
+    end
     ctx.draw_stop(stop, x, entry.y.value, w,
         entry.alpha.value, entry.green.value)
 end
 
 local function prune(card_anim, ctx, doomed)
-    local index = 1
+    local index
+    local id
+
+    index = 1
     while doomed[index] do
-        local id = doomed[index]
+        id = doomed[index]
         card_anim.stops[id] = nil
         ctx.prune(id)
         index = index + 1
     end
 end
 
+local function tick_layout_item(card_anim, item, dt, doomed)
+    local entry
+
+    entry = card_anim.stops[item.stop.id]
+    if item.stop.is_completed and not entry.phase then
+        start_green(entry)
+    end
+    if advance_phase(entry, dt) then
+        table.insert(doomed, item.stop.id)
+    end
+    update_entry(entry, item.target_y, dt)
+    return entry
+end
+
 function route_anim.run(view_state, market_id, stops, x, top_y, w, ctx)
-    local card_anim = ensure_card_anim(view_state, market_id)
-    local layout = build_layout(stops, top_y, ctx)
+    local card_anim
+    local layout
+    local dt
+    local doomed
+    local index
+    local item
+    local entry
+
+    card_anim = ensure_card_anim(view_state, market_id)
+    layout = build_layout(stops, top_y, ctx)
     reconcile(card_anim, layout)
-    local dt = input.dt or 0
-    local doomed = {}
-    local index = 1
+    dt = input.dt or 0
+    doomed = {}
+    index = 1
     while layout[index] do
-        local item = layout[index]
-        local entry = card_anim.stops[item.stop.id]
-        if item.stop.is_completed and not entry.phase then
-            start_green(entry)
-        end
-        if advance_phase(entry, dt) then
-            table.insert(doomed, item.stop.id)
-        end
-        update_entry(entry, item.target_y, dt)
+        item = layout[index]
+        entry = tick_layout_item(card_anim, item, dt, doomed)
         draw_entry(entry, item.stop, x, w, ctx)
         index = index + 1
     end

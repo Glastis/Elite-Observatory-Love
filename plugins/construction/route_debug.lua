@@ -11,6 +11,10 @@ local STATIONS_FILE      = "construction_debug_stations.json"
 local ROUTES_FILE        = "construction_debug_routes.json"
 local CONSTRUCTIONS_FILE = "construction_debug_constructions.json"
 local DUMP_INTERVAL_S    = 5
+local UNKNOWN_GLYPH      = "?"
+local PATH_SEPARATOR     = "/"
+local ANNOUNCE_PREFIX    = "construction debug logs -> "
+local CWD_PATH           = "."
 
 local is_enabled = false
 local fetched_by_market = {}
@@ -21,21 +25,32 @@ local function output_dir()
     if love and love.filesystem and love.filesystem.getSource then
         return love.filesystem.getSource()
     end
-    return "."
+    return CWD_PATH
 end
 
 local function write_json(file_name, payload)
-    local ok, encoded = pcall(json.encode, payload)
-    if not ok then return end
-    local handle = io.open(output_dir() .. "/" .. file_name, "w")
-    if not handle then return end
+    local ok
+    local encoded
+    local handle
+
+    ok, encoded = pcall(json.encode, payload)
+    if not ok then
+        return
+    end
+    handle = io.open(output_dir() .. PATH_SEPARATOR .. file_name, "w")
+    if not handle then
+        return
+    end
     handle:write(encoded)
     handle:close()
 end
 
 local function values_of(map)
-    local list = {}
-    local key = next(map)
+    local list
+    local key
+
+    list = {}
+    key = next(map)
     while key do
         table.insert(list, map[key])
         key = next(map, key)
@@ -44,18 +59,28 @@ local function values_of(map)
 end
 
 local function build_list(records, builder)
-    local list = {}
-    local index = 1
+    local list
+    local index
+    local entry
+
+    list = {}
+    index = 1
     while records[index] do
-        local entry = builder(records[index])
-        if entry then table.insert(list, entry) end
+        entry = builder(records[index])
+        if entry then
+            table.insert(list, entry)
+        end
         index = index + 1
     end
     return list
 end
 
 local function resource_row(resource)
-    local needed, in_cargo, to_buy = amounts.for_resource(resource)
+    local needed
+    local in_cargo
+    local to_buy
+
+    needed, in_cargo, to_buy = amounts.for_resource(resource)
     return {
         key      = resource.key,
         display  = resource.display,
@@ -68,9 +93,13 @@ local function resource_row(resource)
 end
 
 local function resource_rows(site)
-    local rows = {}
-    local resources = (site and site.resources) or {}
-    local index = 1
+    local rows
+    local resources
+    local index
+
+    rows = {}
+    resources = (site and site.resources) or {}
+    index = 1
     while resources[index] do
         table.insert(rows, resource_row(resources[index]))
         index = index + 1
@@ -79,8 +108,13 @@ local function resource_rows(site)
 end
 
 local function construction_entry(record)
-    local site = record.site
-    local needed, in_cargo, to_buy = amounts.site_totals(site)
+    local site
+    local needed
+    local in_cargo
+    local to_buy
+
+    site = record.site
+    needed, in_cargo, to_buy = amounts.site_totals(site)
     return {
         market_id = record.market_id,
         label     = site.label,
@@ -104,9 +138,13 @@ local function stop_row(stop)
 end
 
 local function stop_rows(route)
-    local rows = {}
-    local stops = route.stops or {}
-    local index = 1
+    local rows
+    local stops
+    local index
+
+    rows = {}
+    stops = route.stops or {}
+    index = 1
     while stops[index] do
         table.insert(rows, stop_row(stops[index]))
         index = index + 1
@@ -115,8 +153,12 @@ local function stop_rows(route)
 end
 
 local function route_entry(record)
-    local route = route_state.get(record.market_id)
-    if not route then return nil end
+    local route
+
+    route = route_state.get(record.market_id)
+    if not route then
+        return nil
+    end
     return {
         market_id     = record.market_id,
         label         = record.site.label,
@@ -133,11 +175,16 @@ local function route_entry(record)
 end
 
 local function station_record(grouped, source, depot_coords)
-    local key = (source.system_name or "?")
+    local key
+    local entry
+
+    key = (source.system_name or UNKNOWN_GLYPH)
         .. route_constants.STATION_KEY_SEPARATOR
-        .. (source.station_name or "?")
-    local entry = grouped[key]
-    if entry then return entry end
+        .. (source.station_name or UNKNOWN_GLYPH)
+    entry = grouped[key]
+    if entry then
+        return entry
+    end
     entry = {
         station                = source.station_name,
         system                 = source.system_name,
@@ -163,10 +210,14 @@ local function good_row(commodity_key, source, displays)
 end
 
 local function collect_commodity(grouped, commodity_key, sources, fetched)
-    local index = 1
+    local index
+    local source
+    local entry
+
+    index = 1
     while sources[index] do
-        local source = sources[index]
-        local entry = station_record(grouped, source, fetched.depot_coords)
+        source = sources[index]
+        entry = station_record(grouped, source, fetched.depot_coords)
         table.insert(entry.goods,
             good_row(commodity_key, source, fetched.displays))
         index = index + 1
@@ -174,8 +225,11 @@ local function collect_commodity(grouped, commodity_key, sources, fetched)
 end
 
 local function stations_of(fetched)
-    local grouped = {}
-    local commodity_key = next(fetched.sources_by_key)
+    local grouped
+    local commodity_key
+
+    grouped = {}
+    commodity_key = next(fetched.sources_by_key)
     while commodity_key do
         collect_commodity(grouped, commodity_key,
             fetched.sources_by_key[commodity_key], fetched)
@@ -185,8 +239,12 @@ local function stations_of(fetched)
 end
 
 local function station_site_entry(record)
-    local fetched = fetched_by_market[record.market_id]
-    if not fetched then return nil end
+    local fetched
+
+    fetched = fetched_by_market[record.market_id]
+    if not fetched then
+        return nil
+    end
     return {
         market_id = record.market_id,
         label     = record.site.label,
@@ -196,14 +254,19 @@ local function station_site_entry(record)
 end
 
 local function announce_path()
-    if has_announced_path then return end
+    if has_announced_path then
+        return
+    end
     has_announced_path = true
-    print("construction debug logs -> " .. output_dir())
+    print(ANNOUNCE_PREFIX .. output_dir())
 end
 
 local function dump()
-    local records = state.sites_sorted()
-    local generated_at = os.date()
+    local records
+    local generated_at
+
+    records = state.sites_sorted()
+    generated_at = os.date()
     write_json(STATIONS_FILE, {
         generated_at = generated_at,
         sites        = build_list(records, station_site_entry),
@@ -224,7 +287,9 @@ end
 
 function route_debug.record_sources(market_id, system_name, depot_coords,
         sources_by_key, displays)
-    if not is_enabled or not market_id then return end
+    if not is_enabled or not market_id then
+        return
+    end
     fetched_by_market[market_id] = {
         system_name    = system_name,
         depot_coords   = depot_coords,
@@ -234,13 +299,19 @@ function route_debug.record_sources(market_id, system_name, depot_coords,
 end
 
 function route_debug.forget(market_id)
-    if market_id then fetched_by_market[market_id] = nil end
+    if market_id then
+        fetched_by_market[market_id] = nil
+    end
 end
 
 function route_debug.update(dt)
-    if not is_enabled then return end
+    if not is_enabled then
+        return
+    end
     seconds_since_dump = seconds_since_dump + (dt or 0)
-    if seconds_since_dump < DUMP_INTERVAL_S then return end
+    if seconds_since_dump < DUMP_INTERVAL_S then
+        return
+    end
     seconds_since_dump = 0
     announce_path()
     dump()

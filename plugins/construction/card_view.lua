@@ -150,18 +150,26 @@ local function format_count(value)
 end
 
 local function format_percent(fraction)
-    local percent = math.floor((fraction or 0) * constants.PERCENT_MULTIPLIER
+    local percent
+
+    percent = math.floor((fraction or 0) * constants.PERCENT_MULTIPLIER
         + PERCENT_ROUNDING)
     return string.format(constants.PERCENT_FORMAT, percent)
 end
 
 local function progress_color(card)
-    if card.is_ready then return theme.colors.success end
+    if card.is_ready then
+        return theme.colors.success
+    end
     return theme.colors.accent
 end
 
 local function build_card(market_id, site, is_hidden)
-    local needed_total, cargo_total, to_buy_total = amounts.site_totals(site)
+    local needed_total
+    local cargo_total
+    local to_buy_total
+
+    needed_total, cargo_total, to_buy_total = amounts.site_totals(site)
     return {
         market_id    = market_id,
         title        = site.label or (constants.UNKNOWN_SITE_PREFIX .. market_id),
@@ -177,7 +185,9 @@ local function build_card(market_id, site, is_hidden)
 end
 
 local function build_cards(show_hidden)
-    local list = {}
+    local list
+
+    list = {}
     for _, entry in ipairs(state.sites_sorted()) do
         if show_hidden or not entry.is_hidden then
             table.insert(list,
@@ -188,7 +198,9 @@ local function build_cards(show_hidden)
 end
 
 local function resource_body_h(card)
-    if #card.resources == 0 then return RESOURCE_ROW_H end
+    if #card.resources == 0 then
+        return RESOURCE_ROW_H
+    end
     return COL_HEADER_H + #card.resources * RESOURCE_ROW_H
 end
 
@@ -206,7 +218,9 @@ local function stop_card_height(stop)
 end
 
 local function route_stops_height(stops)
-    local total = 0
+    local total
+
+    total = 0
     for _, stop in ipairs(stops) do
         total = total + STOP_CARD_GAP + stop_card_height(stop)
     end
@@ -218,7 +232,9 @@ local function visible_stop_count(stops)
 end
 
 local function route_viewport_height(stops)
-    local total = 0
+    local total
+
+    total = 0
     for index = 1, visible_stop_count(stops) do
         total = total + STOP_CARD_GAP + stop_card_height(stops[index])
     end
@@ -240,17 +256,24 @@ local function body_height(card)
 end
 
 local function card_height(card)
-    local base = CARD_PAD_Y * 2 + CARD_HEADER_H + PROGRESS_BAR_H
+    local base
+
+    base = CARD_PAD_Y * 2 + CARD_HEADER_H + PROGRESS_BAR_H
         + PROGRESS_GAP + CARD_TOTALS_H + SECTION_GAP
     return base + body_height(card)
 end
 
 local function body_columns(inner_x, inner_w)
-    local route_w = math.max(ROUTE_COL_MIN_W,
+    local route_w
+    local resource_w
+    local rule_x
+    local route_x
+
+    route_w = math.max(ROUTE_COL_MIN_W,
         math.floor(inner_w * ROUTE_COL_FRACTION))
-    local resource_w = inner_w - route_w - VRULE_W - BODY_COL_GAP * 2
-    local rule_x = inner_x + resource_w + BODY_COL_GAP
-    local route_x = rule_x + VRULE_W + BODY_COL_GAP
+    resource_w = inner_w - route_w - VRULE_W - BODY_COL_GAP * 2
+    rule_x = inner_x + resource_w + BODY_COL_GAP
+    route_x = rule_x + VRULE_W + BODY_COL_GAP
     return {
         resource = { x = inner_x, w = resource_w },
         rule_x   = rule_x,
@@ -269,16 +292,24 @@ local function panel_opts_for(card)
 end
 
 local function title_color(card)
-    if card.is_hidden then return theme.colors.text_dim end
+    if card.is_hidden then
+        return theme.colors.text_dim
+    end
     return theme.colors.text
 end
 
 local function draw_header(card, x, y, w)
-    local title_font = font_for(FONT_TITLE)
-    local percent_font = font_for(FONT_PERCENT)
-    local percent_text = format_percent(card.progress)
-    local percent_w = text.width(percent_text, percent_font, PERCENT_LETTER_EM)
-    local title_w = math.max(0, w - percent_w - HEADER_GAP)
+    local title_font
+    local percent_font
+    local percent_text
+    local percent_w
+    local title_w
+
+    title_font = font_for(FONT_TITLE)
+    percent_font = font_for(FONT_PERCENT)
+    percent_text = format_percent(card.progress)
+    percent_w = text.width(percent_text, percent_font, PERCENT_LETTER_EM)
+    title_w = math.max(0, w - percent_w - HEADER_GAP)
     text.draw(text.truncate_right(card.title, title_font, title_w, 0), x, y, {
         font = title_font, color = title_color(card),
     })
@@ -305,13 +336,18 @@ local function draw_menu_glyph(cx, cy, color)
 end
 
 local function menu_button_color(is_active)
-    if is_active then return theme.colors.text end
+    if is_active then
+        return theme.colors.text
+    end
     return theme.colors.text_faint
 end
 
 local function draw_menu_button(card, bx, by, view_state)
-    local is_open = view_state.menu_market == card.market_id
-    local is_active = is_open or input.in_rect(bx, by, MENU_BTN_W, CARD_HEADER_H)
+    local is_open
+    local is_active
+
+    is_open = view_state.menu_market == card.market_id
+    is_active = is_open or input.in_rect(bx, by, MENU_BTN_W, CARD_HEADER_H)
     if is_active then
         love.graphics.setColor(theme.colors.seg_hover)
         love.graphics.rectangle("fill", bx, by, MENU_BTN_W, CARD_HEADER_H)
@@ -328,15 +364,19 @@ local function draw_menu_button(card, bx, by, view_state)
 end
 
 local function draw_progress_bar(card, x, y, w)
+    local fraction
+
     love.graphics.setColor(theme.colors.rule_strong)
     love.graphics.rectangle("fill", x, y, w, PROGRESS_BAR_H)
-    local fraction = math.max(0, math.min(1, card.progress))
+    fraction = math.max(0, math.min(1, card.progress))
     love.graphics.setColor(progress_color(card))
     love.graphics.rectangle("fill", x, y, w * fraction, PROGRESS_BAR_H)
 end
 
 local function totals_text(card)
-    local parts = {}
+    local parts
+
+    parts = {}
     for _, part in ipairs(TOTALS_PARTS) do
         table.insert(parts,
             string.format(part.label, format_count(card[part.key])))
@@ -345,7 +385,9 @@ local function totals_text(card)
 end
 
 local function draw_totals(card, x, y, w)
-    local font = font_for(FONT_TOTALS)
+    local font
+
+    font = font_for(FONT_TOTALS)
     text.draw(text.truncate_right(totals_text(card), font, w, TOTALS_LETTER_EM),
         x, y, {
             font = font, color = theme.colors.text_dim,
@@ -354,9 +396,13 @@ local function draw_totals(card, x, y, w)
 end
 
 local function resource_columns(x, w)
-    local buy_x   = x + w - NUM_RESERVE
-    local cargo_x = buy_x   - NUM_GAP - NUM_RESERVE
-    local need_x  = cargo_x - NUM_GAP - NUM_RESERVE
+    local buy_x
+    local cargo_x
+    local need_x
+
+    buy_x   = x + w - NUM_RESERVE
+    cargo_x = buy_x   - NUM_GAP - NUM_RESERVE
+    need_x  = cargo_x - NUM_GAP - NUM_RESERVE
     return { need_x, cargo_x, buy_x }
 end
 
@@ -370,7 +416,9 @@ local function draw_v_rule(x, y, h)
 end
 
 local function draw_column_header(x, y, w, columns)
-    local font = font_for(FONT_COL_HEADER)
+    local font
+
+    font = font_for(FONT_COL_HEADER)
     for i, label in ipairs(COLUMN_HEADER_LABELS) do
         text.draw_v_center(label, columns[i], y, COL_HEADER_H, {
             font = font, color = theme.colors.text_faint, align = "right",
@@ -381,7 +429,9 @@ local function draw_column_header(x, y, w, columns)
 end
 
 local function value_color(value, positive_key, zero_key)
-    if (value or 0) > 0 then return theme.colors[positive_key] end
+    if (value or 0) > 0 then
+        return theme.colors[positive_key]
+    end
     return theme.colors[zero_key]
 end
 
@@ -396,12 +446,16 @@ local function resource_cells(entry)
 end
 
 local function draw_resource_row(entry, x, y, columns)
-    local name_font = font_for(FONT_RESOURCE)
-    local name_w = math.max(0, columns[1] - x - NAME_TRAILING_GAP)
+    local name_font
+    local name_w
+    local number_font
+
+    name_font = font_for(FONT_RESOURCE)
+    name_w = math.max(0, columns[1] - x - NAME_TRAILING_GAP)
     text.draw_v_center(
         text.truncate_right(entry.resource.display, name_font, name_w, 0),
         x, y, RESOURCE_ROW_H, { font = name_font, color = theme.colors.text })
-    local number_font = font_for(FONT_NUMBER)
+    number_font = font_for(FONT_NUMBER)
     for i, cell in ipairs(resource_cells(entry)) do
         text.draw_v_center(format_count(cell.value), columns[i], y,
             RESOURCE_ROW_H, {
@@ -419,27 +473,37 @@ local function draw_all_delivered(x, y, w)
 end
 
 local function resource_row_color(row_index, is_hovered)
-    if is_hovered then return theme.colors.seg_hover end
-    if row_index % 2 == 0 then return theme.colors.row_alt end
+    if is_hovered then
+        return theme.colors.seg_hover
+    end
+    if row_index % 2 == 0 then
+        return theme.colors.row_alt
+    end
     return nil
 end
 
 local function fill_resource_row(x, y, w, color)
-    if not color then return end
+    if not color then
+        return
+    end
     love.graphics.setColor(color)
     love.graphics.rectangle("fill", x, y, w, RESOURCE_ROW_H)
 end
 
 local function draw_resource_section(card, x, y, w)
+    local columns
+    local cy
+    local is_hovered
+
     if #card.resources == 0 then
         draw_all_delivered(x, y, w)
         return
     end
-    local columns = resource_columns(x, w)
+    columns = resource_columns(x, w)
     draw_column_header(x, y, w, columns)
-    local cy = y + COL_HEADER_H
+    cy = y + COL_HEADER_H
     for row_index, entry in ipairs(card.resources) do
-        local is_hovered = input.in_rect(x, cy, w, RESOURCE_ROW_H)
+        is_hovered = input.in_rect(x, cy, w, RESOURCE_ROW_H)
         fill_resource_row(x, cy, w, resource_row_color(row_index, is_hovered))
         draw_resource_row(entry, x, cy, columns)
         cy = cy + RESOURCE_ROW_H
@@ -461,7 +525,9 @@ local function fmt_qty(value)
 end
 
 local function copy_system_to_clipboard(view_state, stop)
-    if not stop or not stop.system then return end
+    if not stop or not stop.system then
+        return
+    end
     if love.system and love.system.setClipboardText then
         love.system.setClipboardText(stop.system)
     end
@@ -472,7 +538,9 @@ local function copy_system_to_clipboard(view_state, stop)
 end
 
 local function is_copy_active(view_state, stop)
-    local feedback = view_state.route_copy
+    local feedback
+
+    feedback = view_state.route_copy
     return feedback ~= nil and feedback.stop == stop
         and love.timer.getTime() < feedback.expires
 end
@@ -498,56 +566,83 @@ local function draw_truncated_name(name, spec, color, x, y, h, w)
 end
 
 local function pick_color(is_docked, docked_color, fallback)
-    if is_docked then return docked_color end
+    if is_docked then
+        return docked_color
+    end
     return fallback
 end
 
 local function draw_stop_system(stop, view_state, x, y, w, is_locked, is_docked)
-    local is_hovered = not is_locked and input.in_rect(x, y, w, STOP_SYSTEM_H)
+    local is_hovered
+    local label
+    local label_color
+    local label_w
+    local hover_color
+    local name_color
+
+    is_hovered = not is_locked and input.in_rect(x, y, w, STOP_SYSTEM_H)
     if is_hovered then
         love.graphics.setColor(theme.colors.seg_hover)
         love.graphics.rectangle("fill", x, y, w, STOP_SYSTEM_H)
     end
-    local label, label_color = stop_system_label(view_state, stop)
-    local label_w = draw_label_right(label, label_color, FONT_STOP_META,
+    label, label_color = stop_system_label(view_state, stop)
+    label_w = draw_label_right(label, label_color, FONT_STOP_META,
         x, y, w, STOP_SYSTEM_H)
-    local hover_color = is_hovered and theme.colors.accent or theme.colors.text
-    local name_color = pick_color(is_docked, theme.colors.success, hover_color)
+    hover_color = is_hovered and theme.colors.accent or theme.colors.text
+    name_color = pick_color(is_docked, theme.colors.success, hover_color)
     draw_truncated_name(stop.system or "?", FONT_STOP_SYSTEM, name_color,
         x, y, STOP_SYSTEM_H, w - label_w - NUM_GAP)
-    if is_locked then return end
+    if is_locked then
+        return
+    end
     if input.clicked_in(x, y, w, STOP_SYSTEM_H) and not view_state.menu_market then
         copy_system_to_clipboard(view_state, stop)
     end
 end
 
 local function draw_stop_station(stop, x, y, w, is_docked)
-    local meta = string.format(STOP_LS_FORMAT, fmt_ls(stop.distance_to_arrival_ls))
-    local meta_w = draw_label_right(meta, theme.colors.text_faint,
+    local meta
+    local meta_w
+    local name_color
+
+    meta = string.format(STOP_LS_FORMAT, fmt_ls(stop.distance_to_arrival_ls))
+    meta_w = draw_label_right(meta, theme.colors.text_faint,
         FONT_STOP_META, x, y, w, STOP_STATION_H)
-    local name_color = pick_color(is_docked, theme.colors.success,
+    name_color = pick_color(is_docked, theme.colors.success,
         theme.colors.text_dim)
     draw_truncated_name(stop.station or "?", FONT_STOP_STATION,
         name_color, x, y, STOP_STATION_H, w - meta_w - NUM_GAP)
 end
 
 local function compute_pickup_status(stops)
-    local remaining = {}
-    local status = {}
-    local stop_index = 1
+    local remaining
+    local status
+    local stop_index
+    local stop
+    local stop_status
+    local pickups
+    local pickup_index
+    local pickup
+    local key
+    local quantity
+    local taken
+
+    remaining = {}
+    status = {}
+    stop_index = 1
     while stops[stop_index] do
-        local stop = stops[stop_index]
-        local stop_status = {}
-        local pickups = stop.pickups or {}
-        local pickup_index = 1
+        stop = stops[stop_index]
+        stop_status = {}
+        pickups = stop.pickups or {}
+        pickup_index = 1
         while pickups[pickup_index] do
-            local pickup = pickups[pickup_index]
-            local key = pickup.commodity_key
+            pickup = pickups[pickup_index]
+            key = pickup.commodity_key
             if remaining[key] == nil then
                 remaining[key] = state.cargo_count(key)
             end
-            local quantity = pickup.quantity or 0
-            local taken = math.min(remaining[key], quantity)
+            quantity = pickup.quantity or 0
+            taken = math.min(remaining[key], quantity)
             remaining[key] = remaining[key] - taken
             stop_status[pickup_index] = quantity > 0 and taken >= quantity
             pickup_index = pickup_index + 1
@@ -559,7 +654,9 @@ local function compute_pickup_status(stops)
 end
 
 local function append_all(target, source)
-    local index = 1
+    local index
+
+    index = 1
     while source[index] do
         table.insert(target, source[index])
         index = index + 1
@@ -568,13 +665,20 @@ local function append_all(target, source)
 end
 
 local function ordered_pickup_entries(stop, status)
-    local pickups = stop.pickups or {}
-    local stop_status = (status and status[stop]) or {}
-    local pending = {}
-    local bought = {}
-    local index = 1
+    local pickups
+    local stop_status
+    local pending
+    local bought
+    local index
+    local entry
+
+    pickups = stop.pickups or {}
+    stop_status = (status and status[stop]) or {}
+    pending = {}
+    bought = {}
+    index = 1
     while pickups[index] do
-        local entry = {
+        entry = {
             pickup    = pickups[index],
             is_bought = stop_status[index] == true,
         }
@@ -596,10 +700,16 @@ local function pickup_colors(is_bought)
 end
 
 local function draw_stop_pickup(entry, x, y, w)
-    local pickup = entry.pickup
-    local name_color, qty_color = pickup_colors(entry.is_bought)
-    local qty = string.format(STOP_QTY_FORMAT, fmt_qty(pickup.quantity))
-    local qty_w = draw_label_right(qty, qty_color, FONT_STOP_NUMBER,
+    local pickup
+    local name_color
+    local qty_color
+    local qty
+    local qty_w
+
+    pickup = entry.pickup
+    name_color, qty_color = pickup_colors(entry.is_bought)
+    qty = string.format(STOP_QTY_FORMAT, fmt_qty(pickup.quantity))
+    qty_w = draw_label_right(qty, qty_color, FONT_STOP_NUMBER,
         x, y, w, STOP_RESOURCE_H)
     draw_truncated_name(pickup.display or pickup.commodity_key or "?",
         FONT_STOP_RESOURCE, name_color,
@@ -607,7 +717,9 @@ local function draw_stop_pickup(entry, x, y, w)
 end
 
 local function draw_stop_pickups(stop, x, y, w, status)
-    local cy = y
+    local cy
+
+    cy = y
     for _, entry in ipairs(ordered_pickup_entries(stop, status)) do
         draw_stop_pickup(entry, x, cy, w)
         cy = cy + STOP_RESOURCE_H
@@ -636,7 +748,10 @@ local function stop_left_accent(green, is_docked)
 end
 
 local function stop_panel_opts(green, is_docked)
-    local left, left_w = stop_left_accent(green, is_docked)
+    local left
+    local left_w
+
+    left, left_w = stop_left_accent(green, is_docked)
     return {
         bg            = mix_color(theme.colors.panel_deep, STOP_DONE_BG, green),
         border        = mix_color(theme.colors.rule, theme.colors.success, green),
@@ -646,7 +761,9 @@ local function stop_panel_opts(green, is_docked)
 end
 
 local function draw_stop_fade(x, y, w, h, fade)
-    if fade >= 1 then return end
+    if fade >= 1 then
+        return
+    end
     love.graphics.setColor(theme.with_alpha(theme.colors.panel, 1 - fade))
     love.graphics.rectangle("fill", x, y, w, h)
 end
@@ -657,15 +774,22 @@ end
 
 local function draw_stop_card(stop, view_state, x, y, w, fade, green, bounds,
         pickup_status)
+    local h
+    local is_locked
+    local is_docked
+    local inner_x
+    local inner_w
+    local cy
+
     fade = fade or 1
     green = green or 0
-    local h = stop_card_height(stop)
-    local is_locked = green > 0 or is_stop_clipped(y, h, bounds)
-    local is_docked = state.is_docked_at(stop.station, stop.system)
+    h = stop_card_height(stop)
+    is_locked = green > 0 or is_stop_clipped(y, h, bounds)
+    is_docked = state.is_docked_at(stop.station, stop.system)
     panel.draw(x, y, w, h, stop_panel_opts(green, is_docked))
-    local inner_x = x + STOP_CARD_PAD_X
-    local inner_w = w - STOP_CARD_PAD_X * 2
-    local cy = y + STOP_CARD_PAD_Y
+    inner_x = x + STOP_CARD_PAD_X
+    inner_w = w - STOP_CARD_PAD_X * 2
+    cy = y + STOP_CARD_PAD_Y
     draw_stop_system(stop, view_state, inner_x, cy, inner_w, is_locked, is_docked)
     cy = cy + STOP_SYSTEM_H
     draw_stop_station(stop, inner_x, cy, inner_w, is_docked)
@@ -675,11 +799,19 @@ local function draw_stop_card(stop, view_state, x, y, w, fade, green, bounds,
 end
 
 local function draw_route_summary(route, x, y, w)
-    if not route or route.status ~= route_constants.STATUS_READY then return end
-    if (route.total_stops or 0) <= 0 then return end
-    local font = font_for(FONT_COL_HEADER)
-    local summary = string.format(ROUTE_STOPS_FORMAT, route.total_stops)
-    local summary_w = text.width(summary, font, COL_HEADER_LETTER_EM)
+    local font
+    local summary
+    local summary_w
+
+    if not route or route.status ~= route_constants.STATUS_READY then
+        return
+    end
+    if (route.total_stops or 0) <= 0 then
+        return
+    end
+    font = font_for(FONT_COL_HEADER)
+    summary = string.format(ROUTE_STOPS_FORMAT, route.total_stops)
+    summary_w = text.width(summary, font, COL_HEADER_LETTER_EM)
     text.draw_v_center(summary, x + w - summary_w, y, ROUTE_HEADER_H, {
         font = font, color = theme.colors.text_faint,
         letter_em = COL_HEADER_LETTER_EM,
@@ -718,35 +850,57 @@ local function set_route_scroll(view_state, market_id, value)
 end
 
 local function handle_route_wheel(view_state, market_id, max_scroll, x, y, w, h)
-    if not input.in_rect(x, y, w, h) then return end
-    if max_scroll <= 0 then return end
+    local scrolled
+
+    if not input.in_rect(x, y, w, h) then
+        return
+    end
+    if max_scroll <= 0 then
+        return
+    end
     view_state.route_wheel_market = market_id
-    if input.wheel_dy == 0 then return end
-    local scrolled = route_scroll(view_state, market_id)
+    if input.wheel_dy == 0 then
+        return
+    end
+    scrolled = route_scroll(view_state, market_id)
         - input.wheel_dy * ROUTE_WHEEL_STEP
     set_route_scroll(view_state, market_id, clamp(scrolled, 0, max_scroll))
 end
 
 local function draw_route_scrollbar(x, y, w, h, content_h, scroll, max_scroll)
-    if max_scroll <= 0 then return end
-    local bar_h = math.max(ROUTE_SCROLLBAR_MIN_H, h * h / content_h)
-    local bar_y = y + (h - bar_h) * (scroll / max_scroll)
+    local bar_h
+    local bar_y
+
+    if max_scroll <= 0 then
+        return
+    end
+    bar_h = math.max(ROUTE_SCROLLBAR_MIN_H, h * h / content_h)
+    bar_y = y + (h - bar_h) * (scroll / max_scroll)
     love.graphics.setColor(theme.colors.rule_strong)
     love.graphics.rectangle("fill",
         x + w - ROUTE_SCROLLBAR_W, bar_y, ROUTE_SCROLLBAR_W, bar_h)
 end
 
 local function draw_route_stops(card, view_state, x, y, w)
-    local stops = card.route.stops
-    local view_h = route_viewport_height(stops)
-    local content_h = route_stops_height(stops)
-    local max_scroll = math.max(0, content_h - view_h)
+    local stops
+    local view_h
+    local content_h
+    local max_scroll
+    local scroll
+    local bounds
+    local pickup_status
+    local prev_scissor
+
+    stops = card.route.stops
+    view_h = route_viewport_height(stops)
+    content_h = route_stops_height(stops)
+    max_scroll = math.max(0, content_h - view_h)
     handle_route_wheel(view_state, card.market_id, max_scroll, x, y, w, view_h)
-    local scroll = clamp(route_scroll(view_state, card.market_id), 0, max_scroll)
+    scroll = clamp(route_scroll(view_state, card.market_id), 0, max_scroll)
     set_route_scroll(view_state, card.market_id, scroll)
-    local bounds = { top = y, bottom = y + view_h }
-    local pickup_status = compute_pickup_status(stops)
-    local prev_scissor = { love.graphics.getScissor() }
+    bounds = { top = y, bottom = y + view_h }
+    pickup_status = compute_pickup_status(stops)
+    prev_scissor = { love.graphics.getScissor() }
     love.graphics.intersectScissor(x, y, w, view_h)
     route_anim.run(view_state, card.market_id, stops, x, y, w, {
         gap         = STOP_CARD_GAP,
@@ -764,7 +918,9 @@ local function draw_route_stops(card, view_state, x, y, w)
 end
 
 local function draw_route_body(card, view_state, x, y, w)
-    local status = route_status_of(card)
+    local status
+
+    status = route_status_of(card)
     if status ~= route_constants.STATUS_READY then
         draw_route_message(ROUTE_STATE_MESSAGES[status]
             or ROUTE_STATE_MESSAGES[route_constants.STATUS_PENDING],
@@ -784,11 +940,16 @@ local function draw_route_section(card, view_state, x, y, w)
 end
 
 local function draw_card(card, x, y, w, h, view_state)
+    local inner_x
+    local inner_w
+    local cy
+    local columns
+
     h = h or card_height(card)
     card_view.draw_card_panel(x, y, w, h, panel_opts_for(card))
-    local inner_x = x + CARD_PAD_X
-    local inner_w = w - CARD_PAD_X * 2
-    local cy = y + CARD_PAD_Y
+    inner_x = x + CARD_PAD_X
+    inner_w = w - CARD_PAD_X * 2
+    cy = y + CARD_PAD_Y
     draw_header(card, inner_x, cy, inner_w - MENU_BTN_W - MENU_BTN_GAP)
     draw_menu_button(card, inner_x + inner_w - MENU_BTN_W, cy, view_state)
     cy = cy + CARD_HEADER_H
@@ -796,7 +957,7 @@ local function draw_card(card, x, y, w, h, view_state)
     cy = cy + PROGRESS_BAR_H + PROGRESS_GAP
     draw_totals(card, inner_x, cy, inner_w)
     cy = cy + CARD_TOTALS_H + SECTION_GAP
-    local columns = body_columns(inner_x, inner_w)
+    columns = body_columns(inner_x, inner_w)
     draw_resource_section(card, columns.resource.x, cy, columns.resource.w)
     draw_v_rule(columns.rule_x, cy, y + h - CARD_PAD_Y - cy)
     draw_route_section(card, view_state, columns.route.x, cy, columns.route.w)
@@ -808,9 +969,13 @@ local function menu_height()
 end
 
 local function menu_geometry(anchor, pane_y, pane_h)
-    local x = anchor.x + anchor.w - MENU_WIDTH
-    local h = menu_height()
-    local below_y = anchor.y + anchor.h + MENU_ANCHOR_GAP
+    local x
+    local h
+    local below_y
+
+    x = anchor.x + anchor.w - MENU_WIDTH
+    h = menu_height()
+    below_y = anchor.y + anchor.h + MENU_ANCHOR_GAP
     if below_y + h <= pane_y + pane_h then
         return x, below_y, h
     end
@@ -818,15 +983,23 @@ local function menu_geometry(anchor, pane_y, pane_h)
 end
 
 local function dismiss_if_outside(view_state, anchor, menu_x, menu_y, menu_h)
-    if not input.released then return false end
-    if input.in_rect(anchor.x, anchor.y, anchor.w, anchor.h) then return false end
-    if input.in_rect(menu_x, menu_y, MENU_WIDTH, menu_h) then return false end
+    if not input.released then
+        return false
+    end
+    if input.in_rect(anchor.x, anchor.y, anchor.w, anchor.h) then
+        return false
+    end
+    if input.in_rect(menu_x, menu_y, MENU_WIDTH, menu_h) then
+        return false
+    end
     view_state.menu_market = nil
     return true
 end
 
 local function draw_menu_item(view_state, market_id, definition, x, item_y)
-    local is_hovered = input.in_rect(x, item_y, MENU_WIDTH, MENU_ITEM_H)
+    local is_hovered
+
+    is_hovered = input.in_rect(x, item_y, MENU_WIDTH, MENU_ITEM_H)
     if is_hovered then
         love.graphics.setColor(theme.colors.seg_hover)
         love.graphics.rectangle("fill", x, item_y, MENU_WIDTH, MENU_ITEM_H)
@@ -843,22 +1016,34 @@ local function draw_menu_item(view_state, market_id, definition, x, item_y)
 end
 
 local function draw_menu_items(view_state, market_id, x, y)
+    local item_y
+
     for index, definition in ipairs(MENU_ITEMS) do
-        local item_y = y + MENU_PAD_Y + (index - 1) * MENU_ITEM_H
+        item_y = y + MENU_PAD_Y + (index - 1) * MENU_ITEM_H
         draw_menu_item(view_state, market_id, definition, x, item_y)
     end
 end
 
 local function draw_menu_overlay(view_state, _, pane_y, _, pane_h)
-    local market_id = view_state.menu_market
-    if not market_id then return end
+    local market_id
+    local anchor
+    local menu_x
+    local menu_y
+    local menu_h
+
+    market_id = view_state.menu_market
+    if not market_id then
+        return
+    end
     if not state.get_site(market_id) then
         view_state.menu_market = nil
         return
     end
-    local anchor = view_state.menu_anchor
-    if not anchor then return end
-    local menu_x, menu_y, menu_h = menu_geometry(anchor, pane_y, pane_h)
+    anchor = view_state.menu_anchor
+    if not anchor then
+        return
+    end
+    menu_x, menu_y, menu_h = menu_geometry(anchor, pane_y, pane_h)
     if dismiss_if_outside(view_state, anchor, menu_x, menu_y, menu_h) then
         return
     end

@@ -10,11 +10,17 @@ local WORKER_SCRIPT_PATH    = "observatory/log_monitor/parse_pool_worker.lua"
 local WORKER_CAP            = 8
 local WORKER_FLOOR          = 2
 local IN_FLIGHT_MARGIN      = 2
+local FALLBACK_LOG_PREFIX   = "[parse_pool] worker failed, falling back to sync: "
 
 local function resolve_worker_count()
-    local probe = love and love.system and love.system.getProcessorCount
-    if type(probe) ~= "function" then return WORKER_FLOOR end
-    local available = probe() or WORKER_FLOOR
+    local probe
+    local available
+
+    probe = love and love.system and love.system.getProcessorCount
+    if type(probe) ~= "function" then
+        return WORKER_FLOOR
+    end
+    available = probe() or WORKER_FLOOR
     return math.max(WORKER_FLOOR, math.min(available, WORKER_CAP))
 end
 
@@ -35,11 +41,16 @@ local function worker_for(file_index)
 end
 
 local function spawn_workers()
-    local index = 1
+    local index
+    local job_name
+    local result_name
+    local thread
+
+    index = 1
     while index <= WORKER_COUNT do
-        local job_name = JOB_CHANNEL_PREFIX .. index
-        local result_name = RESULT_CHANNEL_PREFIX .. index
-        local thread = love.thread.newThread(WORKER_SCRIPT_PATH)
+        job_name = JOB_CHANNEL_PREFIX .. index
+        result_name = RESULT_CHANNEL_PREFIX .. index
+        thread = love.thread.newThread(WORKER_SCRIPT_PATH)
         thread:start(job_name, result_name, SHUTDOWN_SENTINEL)
         pool.workers[index] = thread
         pool.job_channels[index] = love.thread.getChannel(job_name)
@@ -58,7 +69,9 @@ local function start_pool()
 end
 
 local function clear_channels()
-    local index = 1
+    local index
+
+    index = 1
     while index <= WORKER_COUNT do
         pool.job_channels[index]:clear()
         pool.result_channels[index]:clear()
@@ -86,9 +99,11 @@ local function in_flight(job)
 end
 
 local function assign_jobs(job)
+    local index
+
     while in_flight(job) < MAX_FILES_IN_FLIGHT
             and job.next_to_assign <= job.total_files do
-        local index = job.next_to_assign
+        index = job.next_to_assign
         pool.job_channels[worker_for(index)]:push({
             batch_id = job.batch_id,
             index    = index,
@@ -99,19 +114,26 @@ local function assign_jobs(job)
 end
 
 local function worker_error()
-    local index = 1
+    local index
+    local message
+
+    index = 1
     while index <= #pool.workers do
-        local message = pool.workers[index]:getError()
-        if message then return message end
+        message = pool.workers[index]:getError()
+        if message then
+            return message
+        end
         index = index + 1
     end
     return nil
 end
 
 local function service_threads(job)
-    local message = worker_error()
+    local message
+
+    message = worker_error()
     if message then
-        print("[parse_pool] worker failed, falling back to sync: " .. message)
+        print(FALLBACK_LOG_PREFIX .. message)
         job.is_threaded = false
         return
     end
@@ -119,25 +141,40 @@ local function service_threads(job)
 end
 
 local function pop_fresh_result(channel, batch_id)
+    local result
+
     while true do
-        local result = channel:pop()
-        if not result then return nil end
-        if result.batch_id == batch_id then return result end
+        result = channel:pop()
+        if not result then
+            return nil
+        end
+        if result.batch_id == batch_id then
+            return result
+        end
     end
 end
 
 local function take_current_threaded(job)
-    local channel = pool.result_channels[worker_for(job.next_to_emit)]
-    local result = pop_fresh_result(channel, job.batch_id)
-    if not result then return false end
+    local channel
+    local result
+
+    channel = pool.result_channels[worker_for(job.next_to_emit)]
+    result = pop_fresh_result(channel, job.batch_id)
+    if not result then
+        return false
+    end
     result.cursor = 1
     job.current = result
     return true
 end
 
 local function take_current(job)
-    if job.next_to_emit > job.total_files then return false end
-    if job.is_threaded then return take_current_threaded(job) end
+    if job.next_to_emit > job.total_files then
+        return false
+    end
+    if job.is_threaded then
+        return take_current_threaded(job)
+    end
     job.current = file_parser.parse(job.next_to_emit,
         job.files[job.next_to_emit])
     job.current.cursor = 1
@@ -145,13 +182,18 @@ local function take_current(job)
 end
 
 local function ensure_current(job)
-    if job.current then return true end
+    if job.current then
+        return true
+    end
     return take_current(job)
 end
 
 local function emit_current(job, remaining, process_entry)
-    local entries = job.current.entries
-    local count = #entries
+    local entries
+    local count
+
+    entries = job.current.entries
+    count = #entries
     while remaining > 0 and job.current.cursor <= count do
         process_entry(entries[job.current.cursor])
         job.current.cursor = job.current.cursor + 1
@@ -162,8 +204,12 @@ local function emit_current(job, remaining, process_entry)
 end
 
 local function finalize_current(job, state)
-    local current = job.current
-    if current.cursor <= #current.entries then return end
+    local current
+
+    current = job.current
+    if current.cursor <= #current.entries then
+        return
+    end
     file_reader.mark_consumed(state, current.path, current.size)
     job.next_to_emit = job.next_to_emit + 1
     job.done = job.done + 1
@@ -175,8 +221,11 @@ local function is_finished(job)
 end
 
 function parse_pool.start(files)
-    local is_threaded = start_pool()
-    local job = new_job(files, is_threaded)
+    local is_threaded
+    local job
+
+    is_threaded = start_pool()
+    job = new_job(files, is_threaded)
     if is_threaded then
         clear_channels()
         assign_jobs(job)
@@ -185,9 +234,15 @@ function parse_pool.start(files)
 end
 
 function parse_pool.step(job, budget, state, process_entry)
-    if not job then return false, false end
-    if job.is_threaded then service_threads(job) end
-    local remaining = budget
+    local remaining
+
+    if not job then
+        return false, false
+    end
+    if job.is_threaded then
+        service_threads(job)
+    end
+    remaining = budget
     while remaining > 0 and ensure_current(job) do
         remaining = emit_current(job, remaining, process_entry)
         finalize_current(job, state)
@@ -196,7 +251,9 @@ function parse_pool.step(job, budget, state, process_entry)
 end
 
 function parse_pool.snapshot(job)
-    if not job then return nil end
+    if not job then
+        return nil
+    end
     return {
         done            = job.done,
         total           = job.total_files,
@@ -205,8 +262,12 @@ function parse_pool.snapshot(job)
 end
 
 function parse_pool.shutdown()
-    if not pool.is_started then return end
-    local index = 1
+    local index
+
+    if not pool.is_started then
+        return
+    end
+    index = 1
     while index <= #pool.workers do
         pool.job_channels[index]:push(SHUTDOWN_SENTINEL)
         index = index + 1

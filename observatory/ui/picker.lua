@@ -11,12 +11,18 @@ local EDGE_LABEL = "..."
 local EDGE_LETTER_EM = 0.18
 local INDICATOR_INSET_Y = 1
 local NO_PRIMARY_KEY = "__none__"
+local DEFAULT_FONT_FAMILY = "mono"
+local DEFAULT_FONT_SIZE = 11
+local DEFAULT_ROW_H = 28
+local SEPARATOR_W = 1
+local FRAME_HALF_PIXEL = 0.5
+local PRIMARY_HOVER_ALPHA = 0.24
 
 local ITEM_VISUALS = {
     primary = {
         color = theme.colors.accent,
         hover_color = theme.colors.text,
-        hover_bg = theme.with_alpha(theme.colors.accent, 0.24),
+        hover_bg = theme.with_alpha(theme.colors.accent, PRIMARY_HOVER_ALPHA),
     },
     disabled = {
         color = theme.colors.text_faint,
@@ -29,8 +35,12 @@ local ITEM_VISUALS = {
 }
 
 local function item_visual_kind(item)
-    if item.primary then return "primary" end
-    if item.disabled then return "disabled" end
+    if item.primary then
+        return "primary"
+    end
+    if item.disabled then
+        return "disabled"
+    end
     return "normal"
 end
 
@@ -58,8 +68,11 @@ local function ensure_item_states(state, n)
 end
 
 local function item_width(it, font)
-    local pad = (it.pad_x or default_pad_x()) * 2
-    local label_w = it.label
+    local pad
+    local label_w
+
+    pad = (it.pad_x or default_pad_x()) * 2
+    label_w = it.label
         and text.width(it.label, font, it.letter_em or LETTER_EM) or 0
     return pad + label_w
 end
@@ -70,22 +83,33 @@ end
 
 local function find_primary_index(items)
     for i, it in ipairs(items) do
-        if it.primary then return i end
+        if it.primary then
+            return i
+        end
     end
     return nil
 end
 
 local function primary_key_of(items, idx)
-    if not idx then return NO_PRIMARY_KEY end
-    local it = items[idx]
+    local it
+
+    if not idx then
+        return NO_PRIMARY_KEY
+    end
+    it = items[idx]
     return it.key or it.label or NO_PRIMARY_KEY
 end
 
 local function fit_window(widths, start_idx, available)
-    local end_idx = start_idx - 1
-    local used = 0
+    local end_idx
+    local used
+
+    end_idx = start_idx - 1
+    used = 0
     for i = start_idx, #widths do
-        if used + widths[i] > available then break end
+        if used + widths[i] > available then
+            break
+        end
         used = used + widths[i]
         end_idx = i
     end
@@ -93,15 +117,27 @@ local function fit_window(widths, start_idx, available)
 end
 
 local function compute_window(widths, start_idx, max_w, edge_w)
-    local n = #widths
-    if n == 0 then return start_idx, 0, false, false, 0 end
-    if start_idx < 1 then start_idx = 1 end
-    if start_idx > n then start_idx = n end
+    local n
+    local has_prev
+    local reserve
+    local end_idx
+    local used
+    local has_next
 
-    local has_prev = start_idx > 1
-    local reserve = has_prev and edge_w or 0
-    local end_idx, used = fit_window(widths, start_idx, max_w - reserve)
-    local has_next = end_idx < n
+    n = #widths
+    if n == 0 then
+        return start_idx, 0, false, false, 0
+    end
+    if start_idx < 1 then
+        start_idx = 1
+    end
+    if start_idx > n then
+        start_idx = n
+    end
+    has_prev = start_idx > 1
+    reserve = has_prev and edge_w or 0
+    end_idx, used = fit_window(widths, start_idx, max_w - reserve)
+    has_next = end_idx < n
     if not has_next then
         return start_idx, end_idx, has_prev, false, used
     end
@@ -110,30 +146,46 @@ local function compute_window(widths, start_idx, max_w, edge_w)
 end
 
 local function clamp_start(state, n)
-    if n == 0 then state.start_index = 1; return end
-    if state.start_index < 1 then state.start_index = 1 end
-    if state.start_index > n then state.start_index = n end
+    if n == 0 then
+        state.start_index = 1
+        return
+    end
+    if state.start_index < 1 then
+        state.start_index = 1
+    end
+    if state.start_index > n then
+        state.start_index = n
+    end
 end
 
 local function scroll_primary_into_view(state, widths, primary_idx, max_w, edge_w)
-    if not primary_idx then return end
-    local n = #widths
+    local n
+    local end_idx
+
+    if not primary_idx then
+        return
+    end
+    n = #widths
     if state.start_index > primary_idx then
         state.start_index = primary_idx
         return
     end
     while state.start_index <= n do
-        local _, end_idx = compute_window(widths, state.start_index,
-            max_w, edge_w)
-        if primary_idx <= end_idx then return end
+        _, end_idx = compute_window(widths, state.start_index, max_w, edge_w)
+        if primary_idx <= end_idx then
+            return
+        end
         state.start_index = state.start_index + 1
     end
     state.start_index = math.max(1, primary_idx)
 end
 
 local function maybe_scroll_to_primary(state, items, widths, max_w, edge_w)
-    local primary_idx = find_primary_index(items)
-    local current_key = primary_key_of(items, primary_idx)
+    local primary_idx
+    local current_key
+
+    primary_idx = find_primary_index(items)
+    current_key = primary_key_of(items, primary_idx)
     if current_key ~= state.last_primary_key then
         scroll_primary_into_view(state, widths, primary_idx, max_w, edge_w)
     end
@@ -142,7 +194,9 @@ local function maybe_scroll_to_primary(state, items, widths, max_w, edge_w)
 end
 
 local function draw_edge_button(state_btn, x, y, w, h, font, on_click)
-    local was_clicked = button.draw(state_btn, x, y, w, h, {
+    local was_clicked
+
+    was_clicked = button.draw(state_btn, x, y, w, h, {
         label = EDGE_LABEL,
         font = font,
         letter_em = EDGE_LETTER_EM,
@@ -150,17 +204,22 @@ local function draw_edge_button(state_btn, x, y, w, h, font, on_click)
         hover_color = theme.colors.text,
         hover_bg = theme.colors.seg_hover,
     })
-    if was_clicked and on_click then on_click() end
+    if was_clicked and on_click then
+        on_click()
+    end
 end
 
 local function draw_separator(x, y, h)
     love.graphics.setColor(theme.colors.rule)
-    love.graphics.rectangle("fill", x, y, 1, h)
+    love.graphics.rectangle("fill", x, y, SEPARATOR_W, h)
 end
 
 local function draw_item_button(state_btn, item, x, y, w, h, font, draw_right_sep)
-    local visual = ITEM_VISUALS[item_visual_kind(item)]
-    local was_clicked = button.draw(state_btn, x, y, w, h, {
+    local visual
+    local was_clicked
+
+    visual = ITEM_VISUALS[item_visual_kind(item)]
+    was_clicked = button.draw(state_btn, x, y, w, h, {
         label = item.label,
         font = font,
         letter_em = item.letter_em or LETTER_EM,
@@ -176,7 +235,9 @@ local function draw_item_button(state_btn, item, x, y, w, h, font, draw_right_se
 end
 
 local function visible_primary_x(start_x, widths, start_idx, primary_idx)
-    local px = start_x
+    local px
+
+    px = start_x
     for i = start_idx, primary_idx - 1 do
         px = px + widths[i]
     end
@@ -196,9 +257,14 @@ local function update_indicator(state, target_x, target_w, visible)
 end
 
 local function draw_indicator(state, y, h)
-    if state.indicator_a.value <= 0 then return end
-    local base = theme.colors.accent_soft
-    local fill = {
+    local base
+    local fill
+
+    if state.indicator_a.value <= 0 then
+        return
+    end
+    base = theme.colors.accent_soft
+    fill = {
         base[1], base[2], base[3],
         (base[4] or 1) * state.indicator_a.value,
     }
@@ -209,11 +275,15 @@ local function draw_indicator(state, y, h)
 end
 
 local function draw_visible_items(state, items, widths, ctx)
-    local cursor = ctx.items_x
+    local cursor
     local clicked
+    local iw
+    local need_sep
+
+    cursor = ctx.items_x
     for i = ctx.start_idx, ctx.end_idx do
-        local iw = widths[i]
-        local need_sep = (i ~= ctx.end_idx) or ctx.has_next
+        iw = widths[i]
+        need_sep = (i ~= ctx.end_idx) or ctx.has_next
         if draw_item_button(state.items[i], items[i],
                 cursor, ctx.y, iw, ctx.h, ctx.font, need_sep) then
             clicked = i
@@ -224,9 +294,16 @@ local function draw_visible_items(state, items, widths, ctx)
 end
 
 local function compute_layout(widths, max_w, edge_w, start_idx)
-    local s, e, has_prev, has_next, items_w =
+    local s
+    local e
+    local has_prev
+    local has_next
+    local items_w
+    local total_w
+
+    s, e, has_prev, has_next, items_w =
         compute_window(widths, start_idx, max_w, edge_w)
-    local total_w = items_w
+    total_w = items_w
         + (has_prev and edge_w or 0)
         + (has_next and edge_w or 0)
     return {
@@ -241,12 +318,16 @@ local function step_start(state, delta, n)
 end
 
 local function paint_indicator(state, items, widths, ctx)
-    local primary_idx = ctx.primary_idx
-    local visible = primary_idx
+    local primary_idx
+    local visible
+    local px
+
+    primary_idx = ctx.primary_idx
+    visible = primary_idx
         and primary_idx >= ctx.start_idx
         and primary_idx <= ctx.end_idx
     if visible then
-        local px = visible_primary_x(ctx.items_x, widths,
+        px = visible_primary_x(ctx.items_x, widths,
             ctx.start_idx, primary_idx)
         update_indicator(state, px, widths[primary_idx], true)
     else
@@ -258,59 +339,88 @@ local function paint_indicator(state, items, widths, ctx)
     draw_indicator(state, ctx.y, ctx.h)
 end
 
+local function compute_widths(items, font)
+    local widths
+
+    widths = {}
+    for i, it in ipairs(items) do
+        widths[i] = item_width(it, font)
+    end
+    return widths
+end
+
+local function build_draw_context(font, y, h, items_x, layout, primary_idx)
+    return {
+        font        = font,
+        y           = y,
+        h           = h,
+        items_x     = items_x,
+        start_idx   = layout.start_idx,
+        end_idx     = layout.end_idx,
+        has_next    = layout.has_next,
+        primary_idx = primary_idx,
+    }
+end
+
+local function draw_prev_edge(state, items, layout, edge_w, x, y, h, font)
+    if not layout.has_prev then
+        return x
+    end
+    draw_edge_button(state.prev_btn, x, y, edge_w, h, font, function()
+        step_start(state, -1, #items)
+    end)
+    draw_separator(x + edge_w - SEPARATOR_W, y, h)
+    return x + edge_w
+end
+
+local function draw_next_edge(state, items, layout, edge_w, cursor_x, y, h, font)
+    if not layout.has_next then
+        return
+    end
+    draw_separator(cursor_x, y, h)
+    draw_edge_button(state.next_btn, cursor_x, y, edge_w, h, font, function()
+        step_start(state, 1, #items)
+    end)
+end
+
+local function draw_frame(border, x, y, total_w, h)
+    love.graphics.setColor(border)
+    love.graphics.rectangle("line",
+        x + FRAME_HALF_PIXEL, y + FRAME_HALF_PIXEL, total_w - 1, h - 1)
+end
+
 function M.draw(state, items, x, y, opts)
+    local font
+    local h
+    local max_w
+    local border
+    local widths
+    local edge_w
+    local primary_idx
+    local layout
+    local items_x
+    local ctx
+    local clicked
+
     opts = opts or {}
     state = ensure_state(state)
     ensure_item_states(state, #items)
-
-    local font = opts.font or theme.font("mono", 11)
-    local h = opts.h or 28
-    local max_w = opts.max_w or math.huge
-    local border = opts.border or theme.colors.rule
-
-    local widths = {}
-    for i, it in ipairs(items) do widths[i] = item_width(it, font) end
+    font = opts.font or theme.font(DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE)
+    h = opts.h or DEFAULT_ROW_H
+    max_w = opts.max_w or math.huge
+    border = opts.border or theme.colors.rule
+    widths = compute_widths(items, font)
     clamp_start(state, #items)
-
-    local edge_w = edge_width(font)
-    local primary_idx = maybe_scroll_to_primary(state, items, widths,
-        max_w, edge_w)
-    local layout = compute_layout(widths, max_w, edge_w, state.start_index)
-
-    love.graphics.setColor(border)
-    love.graphics.rectangle("line",
-        x + 0.5, y + 0.5, layout.total_w - 1, h - 1)
-
-    local cursor = x
-    if layout.has_prev then
-        draw_edge_button(state.prev_btn, cursor, y, edge_w, h, font, function()
-            step_start(state, -1, #items)
-        end)
-        draw_separator(cursor + edge_w - 1, y, h)
-        cursor = cursor + edge_w
-    end
-
-    local items_x = cursor
-    local ctx = {
-        font = font, y = y, h = h,
-        items_x = items_x,
-        start_idx = layout.start_idx,
-        end_idx = layout.end_idx,
-        has_next = layout.has_next,
-        primary_idx = primary_idx,
-    }
-
+    edge_w = edge_width(font)
+    primary_idx = maybe_scroll_to_primary(state, items, widths, max_w, edge_w)
+    layout = compute_layout(widths, max_w, edge_w, state.start_index)
+    draw_frame(border, x, y, layout.total_w, h)
+    items_x = draw_prev_edge(state, items, layout, edge_w, x, y, h, font)
+    ctx = build_draw_context(font, y, h, items_x, layout, primary_idx)
     paint_indicator(state, items, widths, ctx)
-    local clicked, after_items_x = draw_visible_items(state, items, widths, ctx)
-    cursor = after_items_x
-
-    if layout.has_next then
-        draw_separator(cursor, y, h)
-        draw_edge_button(state.next_btn, cursor, y, edge_w, h, font, function()
-            step_start(state, 1, #items)
-        end)
-    end
-
+    clicked = draw_visible_items(state, items, widths, ctx)
+    draw_next_edge(state, items, layout, edge_w,
+        items_x + layout.items_w, y, h, font)
     return clicked, state
 end
 
