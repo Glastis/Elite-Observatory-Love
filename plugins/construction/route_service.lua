@@ -15,6 +15,7 @@ local core_ref
 local ship_params = {}
 local delivered_baseline = {}
 local aggressive_fetches = {}
+local is_aggressive_mode = false
 
 local function numeric_ship()
     local cargo = tonumber(ship_params.cargo_capacity)
@@ -188,7 +189,7 @@ local function issue_exports(fetch)
 end
 
 local function start_fetch(market_id, system_name, ship, depot_coords,
-        demand, displays, is_aggressive)
+        demand, displays)
     local fetch = {
         market_id      = market_id,
         system_name    = system_name,
@@ -201,7 +202,7 @@ local function start_fetch(market_id, system_name, ship, depot_coords,
         sources_by_key = {},
         request_ids    = {},
         is_cancelled   = false,
-        is_aggressive  = is_aggressive == true,
+        is_aggressive  = is_aggressive_mode,
     }
     route_state.mark_in_flight(market_id, fetch)
     route_state.set_status(market_id, constants.STATUS_PENDING)
@@ -240,7 +241,11 @@ function route_service.set_ship_params(params)
     ship_params = params or {}
 end
 
-function route_service.compute_for_site(market_id, is_forced, is_aggressive)
+function route_service.set_aggressive_mode(is_aggressive)
+    is_aggressive_mode = is_aggressive and true or false
+end
+
+function route_service.compute_for_site(market_id, is_forced)
     if not core_ref then return end
     if core_ref.refresh_ancillary_state then
         core_ref:refresh_ancillary_state()
@@ -268,7 +273,7 @@ function route_service.compute_for_site(market_id, is_forced, is_aggressive)
         return
     end
     start_fetch(market_id, site.system_name, ship, depot_coords, demand,
-        displays, is_aggressive)
+        displays)
 end
 
 function route_service.compute_all(is_forced)

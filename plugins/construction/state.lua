@@ -11,7 +11,6 @@ local on_site_added = function() end
 local on_site_removed = function() end
 local on_site_updated = function() end
 local on_refresh_route = function() end
-local on_aggressive_refresh_route = function() end
 
 function state.set_on_change(callback)
     on_change = callback or function() end
@@ -35,14 +34,6 @@ end
 
 function state.request_route_refresh(market_id)
     if market_id then on_refresh_route(market_id) end
-end
-
-function state.set_on_aggressive_refresh_route(callback)
-    on_aggressive_refresh_route = callback or function() end
-end
-
-function state.request_aggressive_route_refresh(market_id)
-    if market_id then on_aggressive_refresh_route(market_id) end
 end
 
 function state.attach(sites_table, hidden_table)

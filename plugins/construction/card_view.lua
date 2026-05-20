@@ -99,9 +99,8 @@ local FONT_STOP_META     = { family = "mono",        size = 10 }
 
 local COLUMN_HEADER_LABELS = { "NEED", "CARGO", "BUY" }
 
-local HIDE_LABELS              = { [false] = "Hide site", [true] = "Show site" }
-local REFRESH_ROUTE_LABEL      = "Refresh route"
-local AGGRESSIVE_REFRESH_LABEL = "Aggressive refresh route"
+local HIDE_LABELS         = { [false] = "Hide site", [true] = "Show site" }
+local REFRESH_ROUTE_LABEL = "Refresh route"
 
 local MENU_ITEMS = {
     {
@@ -116,12 +115,6 @@ local MENU_ITEMS = {
         label = function() return REFRESH_ROUTE_LABEL end,
         on_click = function(market_id)
             state.request_route_refresh(market_id)
-        end,
-    },
-    {
-        label = function() return AGGRESSIVE_REFRESH_LABEL end,
-        on_click = function(market_id)
-            state.request_aggressive_route_refresh(market_id)
         end,
     },
 }

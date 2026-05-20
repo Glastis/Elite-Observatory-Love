@@ -7,16 +7,23 @@ local route_service    = require("plugins.construction.route_service")
 local settings_helpers = require("observatory.plugin_helpers.settings")
 
 local PERSISTENT_STATE_DEFAULTS = {
-    sites          = {},
-    hidden         = {},
-    is_show_hidden = false,
-    ship_params    = { cargo_capacity = "", jump_loaded = "", jump_unloaded = "" },
+    sites                     = {},
+    hidden                    = {},
+    is_show_hidden            = false,
+    is_aggressive_optimisation = false,
+    ship_params               = { cargo_capacity = "", jump_loaded = "", jump_unloaded = "" },
 }
 
 local SHOW_HIDDEN_BUTTON = {
     label  = "SHOW HIDDEN",
     setter = "set_show_hidden",
     flag   = "is_show_hidden",
+}
+
+local AGGRESSIVE_OPTIMISATION_BUTTON = {
+    label  = "AGGRESSIVE OPTIMISATION",
+    setter = "set_aggressive_optimisation",
+    flag   = "is_aggressive_optimisation",
 }
 
 local CARGO_REFRESH_TRIGGERS = {
@@ -29,7 +36,7 @@ local Plugin = {
     short_name = "Construction",
     version    = "0.2.0",
     default_settings = {},
-    toolbar = { SHOW_HIDDEN_BUTTON },
+    toolbar = { SHOW_HIDDEN_BUTTON, AGGRESSIVE_OPTIMISATION_BUTTON },
 }
 
 local core_ref
@@ -46,11 +53,9 @@ function Plugin:load(core)
     plugin_state.set_on_refresh_route(function(market_id)
         route_service.compute_for_site(market_id, true)
     end)
-    plugin_state.set_on_aggressive_refresh_route(function(market_id)
-        route_service.compute_for_site(market_id, true, true)
-    end)
     route_service.init(core)
     route_service.set_ship_params(self.ship_params)
+    route_service.set_aggressive_mode(self.is_aggressive_optimisation)
 end
 
 function Plugin:journal_event(entry)
@@ -78,6 +83,13 @@ end
 function Plugin:set_show_hidden(is_enabled)
     self.is_show_hidden = is_enabled and true or false
     if core_ref then core_ref:save_state() end
+end
+
+function Plugin:set_aggressive_optimisation(is_enabled)
+    self.is_aggressive_optimisation = is_enabled and true or false
+    route_service.set_aggressive_mode(self.is_aggressive_optimisation)
+    if core_ref then core_ref:save_state() end
+    route_service.compute_all(true)
 end
 
 function Plugin:set_ship_param(param_key, value)
